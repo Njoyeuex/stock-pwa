@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Only the receipt ticket is printed: everything else is hidden and the ticket is
+   repositioned to the top of the page, sized for an 80mm thermal roll. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #receipt-ticket,
+  #receipt-ticket * {
+    visibility: visible;
+  }
+  #receipt-ticket {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 80mm;
+  }
+}
+
