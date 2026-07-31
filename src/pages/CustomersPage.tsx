@@ -129,17 +129,18 @@ export function CustomersPage() {
         ) : customers.length === 0 ? (
           <p className="text-sm text-gray-500">Aucun client pour l'instant.</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="text-left text-gray-500">
-              <tr>
-                <th className="pb-2">Nom</th>
-                <th className="pb-2">Téléphone</th>
-                <th className="pb-2">Solde à crédit</th>
-                <th className="pb-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {customers.map((c) => (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-gray-500">
+                <tr>
+                  <th className="pb-2">Nom</th>
+                  <th className="pb-2">Téléphone</th>
+                  <th className="pb-2">Solde à crédit</th>
+                  <th className="pb-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {customers.map((c) => (
                 <tr key={c.id} className="border-t border-gray-100">
                   <td className="py-2 text-gray-900">{c.name}</td>
                   <td className="py-2 text-gray-700">{c.phone ?? "—"}</td>
@@ -185,8 +186,9 @@ export function CustomersPage() {
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

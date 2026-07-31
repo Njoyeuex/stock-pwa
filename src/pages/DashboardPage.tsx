@@ -103,20 +103,20 @@ export function DashboardPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
           <div className="relative">
             <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Rechercher un article..."
-              className="w-64 rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-900"
+              className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 sm:w-64"
             />
           </div>
           {canManage && (
             <Link
               to="/products"
-              className="flex items-center gap-1.5 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+              className="flex items-center justify-center gap-1.5 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
             >
               <Plus size={16} />
               Ajouter un article
@@ -133,55 +133,57 @@ export function DashboardPage() {
             {rows.length === 0 ? "Aucun article dans le catalogue pour l'instant." : "Aucun résultat."}
           </p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="border-b border-gray-200 text-left text-gray-500">
-              <tr>
-                <th className="px-4 py-3 font-medium">SKU</th>
-                <th className="px-4 py-3 font-medium">Photo</th>
-                <th className="px-4 py-3 font-medium">Titre</th>
-                <th className="px-4 py-3 font-medium">Catégorie</th>
-                <th className="px-4 py-3 font-medium">Qté</th>
-                <th className="px-4 py-3 font-medium">Prix</th>
-                <th className="px-4 py-3 font-medium">Dernière modif.</th>
-                <th className="px-4 py-3 font-medium">Statut</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRows.map((r) => {
-                const photoUrl = productPhotoUrl(r.image_path);
-                const status = stockStatus(r.quantity, r.reorder_threshold);
-                return (
-                  <tr key={r.id} className="border-b border-gray-100 last:border-0">
-                    <td className="px-4 py-3 text-gray-500">{r.sku ?? "—"}</td>
-                    <td className="px-4 py-3">
-                      {photoUrl ? (
-                        <img src={photoUrl} alt={r.name} className="h-10 w-10 rounded-md object-cover" />
-                      ) : (
-                        <div className="h-10 w-10 rounded-md bg-gray-100" />
-                      )}
-                    </td>
-                    <td className="px-4 py-3 font-medium text-gray-900">{r.name}</td>
-                    <td className="px-4 py-3 text-gray-700">{r.category ?? "—"}</td>
-                    <td className="px-4 py-3 text-gray-700">{r.quantity}</td>
-                    <td className="px-4 py-3 text-gray-700">{r.sale_price.toFixed(2)}</td>
-                    <td className="px-4 py-3 text-gray-500">
-                      {new Date(r.updated_at).toLocaleString("fr-FR", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        day: "2-digit",
-                        month: "short",
-                      })}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_CLASSES[status]}`}>
-                        {STATUS_LABELS[status]}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b border-gray-200 text-left text-gray-500">
+                <tr>
+                  <th className="px-4 py-3 font-medium">SKU</th>
+                  <th className="px-4 py-3 font-medium">Photo</th>
+                  <th className="px-4 py-3 font-medium">Titre</th>
+                  <th className="px-4 py-3 font-medium">Catégorie</th>
+                  <th className="px-4 py-3 font-medium">Qté</th>
+                  <th className="px-4 py-3 font-medium">Prix</th>
+                  <th className="px-4 py-3 font-medium">Dernière modif.</th>
+                  <th className="px-4 py-3 font-medium">Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRows.map((r) => {
+                  const photoUrl = productPhotoUrl(r.image_path);
+                  const status = stockStatus(r.quantity, r.reorder_threshold);
+                  return (
+                    <tr key={r.id} className="border-b border-gray-100 last:border-0">
+                      <td className="px-4 py-3 text-gray-500">{r.sku ?? "—"}</td>
+                      <td className="px-4 py-3">
+                        {photoUrl ? (
+                          <img src={photoUrl} alt={r.name} className="h-10 w-10 rounded-md object-cover" />
+                        ) : (
+                          <div className="h-10 w-10 rounded-md bg-gray-100" />
+                        )}
+                      </td>
+                      <td className="px-4 py-3 font-medium text-gray-900">{r.name}</td>
+                      <td className="px-4 py-3 text-gray-700">{r.category ?? "—"}</td>
+                      <td className="px-4 py-3 text-gray-700">{r.quantity}</td>
+                      <td className="px-4 py-3 text-gray-700">{r.sale_price.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-gray-500">
+                        {new Date(r.updated_at).toLocaleString("fr-FR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          day: "2-digit",
+                          month: "short",
+                        })}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_CLASSES[status]}`}>
+                          {STATUS_LABELS[status]}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

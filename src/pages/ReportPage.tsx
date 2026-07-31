@@ -207,6 +207,7 @@ export function ReportPage() {
             {sales.length === 0 ? (
               <p className="text-sm text-gray-500">Aucune vente enregistrée sur cette période.</p>
             ) : (
+              <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-left text-gray-500">
                   <tr>
@@ -282,6 +283,7 @@ export function ReportPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
 

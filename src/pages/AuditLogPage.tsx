@@ -63,26 +63,28 @@ export function AuditLogPage() {
         ) : entries.length === 0 ? (
           <p className="text-sm text-gray-500">Aucun évènement pour l'instant.</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="text-left text-gray-500">
-              <tr>
-                <th className="pb-2">Date</th>
-                <th className="pb-2">Action</th>
-                <th className="pb-2">Table</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((e) => (
-                <tr key={e.id} className="border-t border-gray-100">
-                  <td className="py-2 text-gray-500">
-                    {new Date(e.created_at).toLocaleString("fr-FR")}
-                  </td>
-                  <td className="py-2 text-gray-900">{ACTION_LABELS[e.action] ?? e.action}</td>
-                  <td className="py-2 text-gray-700">{TABLE_LABELS[e.entity_table] ?? e.entity_table}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-gray-500">
+                <tr>
+                  <th className="pb-2">Date</th>
+                  <th className="pb-2">Action</th>
+                  <th className="pb-2">Table</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {entries.map((e) => (
+                  <tr key={e.id} className="border-t border-gray-100">
+                    <td className="py-2 text-gray-500">
+                      {new Date(e.created_at).toLocaleString("fr-FR")}
+                    </td>
+                    <td className="py-2 text-gray-900">{ACTION_LABELS[e.action] ?? e.action}</td>
+                    <td className="py-2 text-gray-700">{TABLE_LABELS[e.entity_table] ?? e.entity_table}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

@@ -116,7 +116,10 @@ export function PurchasesPage() {
         <div className="space-y-2">
           <label className="text-sm text-gray-600">Lignes</label>
           {fields.map((field, index) => (
-            <div key={field.id} className="grid grid-cols-[2fr_1fr_1fr_auto] items-start gap-2">
+            <div
+              key={field.id}
+              className="grid grid-cols-1 gap-2 border-b border-gray-100 pb-3 last:border-0 last:pb-0 sm:grid-cols-[2fr_1fr_1fr_auto] sm:items-start sm:border-0 sm:pb-0"
+            >
               <div>
                 <select
                   className="w-full rounded-md border border-gray-300 px-3 py-2"
@@ -183,24 +186,26 @@ export function PurchasesPage() {
         {purchases.length === 0 ? (
           <p className="text-sm text-gray-500">Aucun achat pour l'instant.</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="text-left text-gray-500">
-              <tr>
-                <th className="pb-2">Date</th>
-                <th className="pb-2">Statut</th>
-                <th className="pb-2">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {purchases.map((p) => (
-                <tr key={p.id} className="border-t border-gray-100">
-                  <td className="py-2 text-gray-900">{new Date(p.created_at).toLocaleString("fr-FR")}</td>
-                  <td className="py-2 capitalize text-gray-700">{p.status}</td>
-                  <td className="py-2 text-gray-900">{p.total_amount.toFixed(2)}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-gray-500">
+                <tr>
+                  <th className="pb-2">Date</th>
+                  <th className="pb-2">Statut</th>
+                  <th className="pb-2">Total</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {purchases.map((p) => (
+                  <tr key={p.id} className="border-t border-gray-100">
+                    <td className="py-2 text-gray-900">{new Date(p.created_at).toLocaleString("fr-FR")}</td>
+                    <td className="py-2 capitalize text-gray-700">{p.status}</td>
+                    <td className="py-2 text-gray-900">{p.total_amount.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

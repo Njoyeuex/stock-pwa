@@ -126,28 +126,30 @@ export function StockPage() {
         {rows.length === 0 ? (
           <p className="text-sm text-gray-500">Aucun mouvement de stock pour l'instant.</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="text-left text-gray-500">
-              <tr>
-                <th className="pb-2">Produit</th>
-                <th className="pb-2">Quantité</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const low = r.products && r.quantity <= r.products.reorder_threshold;
-                return (
-                  <tr key={`${r.product_id}-${r.store_id}`} className="border-t border-gray-100">
-                    <td className="py-2 text-gray-900">{r.products?.name ?? r.product_id}</td>
-                    <td className={`py-2 ${low ? "text-amber-600" : "text-gray-900"}`}>
-                      {r.quantity} {r.products?.unit}
-                      {low && " (stock bas)"}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-gray-500">
+                <tr>
+                  <th className="pb-2">Produit</th>
+                  <th className="pb-2">Quantité</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => {
+                  const low = r.products && r.quantity <= r.products.reorder_threshold;
+                  return (
+                    <tr key={`${r.product_id}-${r.store_id}`} className="border-t border-gray-100">
+                      <td className="py-2 text-gray-900">{r.products?.name ?? r.product_id}</td>
+                      <td className={`py-2 ${low ? "text-amber-600" : "text-gray-900"}`}>
+                        {r.quantity} {r.products?.unit}
+                        {low && " (stock bas)"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

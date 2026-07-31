@@ -102,24 +102,26 @@ export function SuppliersPage() {
         ) : suppliers.length === 0 ? (
           <p className="text-sm text-gray-500">Aucun fournisseur pour l'instant.</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="text-left text-gray-500">
-              <tr>
-                <th className="pb-2">Nom</th>
-                <th className="pb-2">Téléphone</th>
-                <th className="pb-2">Email</th>
-              </tr>
-            </thead>
-            <tbody>
-              {suppliers.map((s) => (
-                <tr key={s.id} className="border-t border-gray-100">
-                  <td className="py-2 text-gray-900">{s.name}</td>
-                  <td className="py-2 text-gray-700">{s.phone ?? "—"}</td>
-                  <td className="py-2 text-gray-700">{s.email ?? "—"}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-gray-500">
+                <tr>
+                  <th className="pb-2">Nom</th>
+                  <th className="pb-2">Téléphone</th>
+                  <th className="pb-2">Email</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {suppliers.map((s) => (
+                  <tr key={s.id} className="border-t border-gray-100">
+                    <td className="py-2 text-gray-900">{s.name}</td>
+                    <td className="py-2 text-gray-700">{s.phone ?? "—"}</td>
+                    <td className="py-2 text-gray-700">{s.email ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

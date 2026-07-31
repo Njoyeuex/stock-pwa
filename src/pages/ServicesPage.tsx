@@ -138,35 +138,37 @@ export function ServicesPage() {
         ) : services.length === 0 ? (
           <p className="text-sm text-gray-500">Aucun service pour l'instant.</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="text-left text-gray-500">
-              <tr>
-                <th className="pb-2">Nom</th>
-                <th className="pb-2">Description</th>
-                <th className="pb-2">Prix</th>
-                {canWrite && <th className="pb-2"></th>}
-              </tr>
-            </thead>
-            <tbody>
-              {services.map((s) => (
-                <tr key={s.id} className="border-t border-gray-100">
-                  <td className="py-2 text-gray-900">{s.name}</td>
-                  <td className="py-2 text-gray-500">{s.description ?? "—"}</td>
-                  <td className="py-2 text-gray-700">{s.price.toFixed(2)}</td>
-                  {canWrite && (
-                    <td className="py-2 text-right">
-                      <button
-                        onClick={() => startEdit(s)}
-                        className="rounded-md bg-gray-100 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-200"
-                      >
-                        Modifier
-                      </button>
-                    </td>
-                  )}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-gray-500">
+                <tr>
+                  <th className="pb-2">Nom</th>
+                  <th className="pb-2">Description</th>
+                  <th className="pb-2">Prix</th>
+                  {canWrite && <th className="pb-2"></th>}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {services.map((s) => (
+                  <tr key={s.id} className="border-t border-gray-100">
+                    <td className="py-2 text-gray-900">{s.name}</td>
+                    <td className="py-2 text-gray-500">{s.description ?? "—"}</td>
+                    <td className="py-2 text-gray-700">{s.price.toFixed(2)}</td>
+                    {canWrite && (
+                      <td className="py-2 text-right">
+                        <button
+                          onClick={() => startEdit(s)}
+                          className="rounded-md bg-gray-100 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-200"
+                        >
+                          Modifier
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

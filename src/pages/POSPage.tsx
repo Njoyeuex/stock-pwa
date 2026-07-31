@@ -564,15 +564,15 @@ export function POSPage() {
 
   return (
     <div className="-m-8 flex min-h-screen flex-col bg-gray-100 text-gray-900">
-      <header className="flex items-center justify-between bg-blue-900 px-8 py-5 text-white">
+      <header className="flex flex-col gap-3 bg-blue-900 px-4 py-4 text-white sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-5">
         <div>
-          <h1 className="text-2xl font-bold">Caisse - Point de Vente</h1>
+          <h1 className="text-xl font-bold sm:text-2xl">Caisse - Point de Vente</h1>
           <p className="text-sm text-blue-200">
             {storeName ? `${storeName}${storeCity ? ` • ${storeCity}` : ""}` : "Chargement du magasin..."}
           </p>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="text-right text-sm">
+        <div className="flex items-center justify-between gap-4 sm:justify-end">
+          <div className="text-sm sm:text-right">
             <p className="font-medium">
               {roleLabel}
               {roleLabel && cashierName ? ": " : ""}
@@ -582,7 +582,7 @@ export function POSPage() {
           </div>
           <Link
             to="/reports"
-            className="flex items-center gap-1.5 rounded-md bg-white/15 px-3 py-2 text-sm font-medium hover:bg-white/25"
+            className="flex shrink-0 items-center gap-1.5 rounded-md bg-white/15 px-3 py-2 text-sm font-medium hover:bg-white/25"
           >
             <FileBarChart size={16} />
             Rapport
@@ -591,7 +591,7 @@ export function POSPage() {
       </header>
 
       {(!isOnline || pendingCount > 0) && (
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-amber-50 px-8 py-2 text-sm text-amber-800">
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-amber-50 px-4 py-2 text-sm text-amber-800 sm:px-8">
           <div className="flex items-center gap-2">
             {!isOnline && (
               <span className="flex items-center gap-1.5">
@@ -618,7 +618,7 @@ export function POSPage() {
         </div>
       )}
       {syncMessage && (
-        <div className="flex items-center justify-between bg-emerald-50 px-8 py-2 text-sm text-emerald-700">
+        <div className="flex items-center justify-between bg-emerald-50 px-4 py-2 text-sm text-emerald-700 sm:px-8">
           <span>{syncMessage}</span>
           <button onClick={() => setSyncMessage(null)} className="text-emerald-600 hover:text-emerald-900">
             <X size={14} />
@@ -627,7 +627,7 @@ export function POSPage() {
       )}
 
       {!sessionLoading && currentStoreId && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-white px-8 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 py-3 sm:px-8">
           {caisseSession ? (
             <>
               <div className="flex items-center gap-2 text-sm text-gray-700">
@@ -676,10 +676,10 @@ export function POSPage() {
         </div>
       )}
 
-      {sessionError && <p className="bg-red-50 px-8 py-2 text-sm text-red-600">{sessionError}</p>}
+      {sessionError && <p className="bg-red-50 px-4 py-2 text-sm text-red-600 sm:px-8">{sessionError}</p>}
 
       {closeResult && (
-        <div className="flex items-center justify-between bg-white px-8 py-3 text-sm">
+        <div className="flex items-center justify-between bg-white px-4 py-3 text-sm sm:px-8">
           <span>
             Caisse fermée — attendu : {closeResult.expected.toFixed(0)}, écart :{" "}
             <span className={closeResult.variance === 0 ? "text-emerald-600" : "text-amber-600"}>
@@ -693,7 +693,7 @@ export function POSPage() {
         </div>
       )}
 
-      <div className="flex flex-1 gap-6 p-8">
+      <div className="flex flex-1 flex-col gap-6 p-4 lg:flex-row lg:p-8">
         <div className="flex-1 space-y-4">
           {sessionRequired && currentStoreId && !sessionLoading && !caisseSession ? (
             <div className="flex flex-col items-center justify-center gap-2 rounded-xl bg-white py-20 text-center">
@@ -766,7 +766,7 @@ export function POSPage() {
           )}
         </div>
 
-        <div className="w-80 shrink-0 overflow-hidden rounded-xl bg-white shadow-sm">
+        <div className="w-full overflow-hidden rounded-xl bg-white shadow-sm lg:w-80 lg:shrink-0">
           <div className="flex items-center gap-2 bg-blue-900 px-4 py-3 font-medium text-white">
             <ShoppingCart size={18} />
             Article à vendre

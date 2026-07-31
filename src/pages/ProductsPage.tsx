@@ -261,7 +261,7 @@ export function ProductsPage() {
               </select>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div>
                 <label className="text-xs text-gray-500">Prix de vente</label>
                 <input type="number" step="0.01" className={inputClass} {...productForm.register("sale_price")} />
@@ -303,52 +303,54 @@ export function ProductsPage() {
         ) : products.length === 0 ? (
           <p className="text-sm text-gray-500">Aucun produit pour l'instant.</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="text-left text-gray-500">
-              <tr>
-                <th className="pb-2">Photo</th>
-                <th className="pb-2">Nom</th>
-                <th className="pb-2">Unité</th>
-                <th className="pb-2">Prix de vente</th>
-                {currentRole !== "caissier" && currentRole !== "vendeur" && <th className="pb-2">Coût</th>}
-                <th className="pb-2">Seuil réappro.</th>
-                {canWrite && <th className="pb-2"></th>}
-              </tr>
-            </thead>
-            <tbody>
-              {products.map((p) => {
-                const photoUrl = productPhotoUrl(p.image_path);
-                return (
-                  <tr key={p.id} className="border-t border-gray-100">
-                    <td className="py-2">
-                      {photoUrl ? (
-                        <img src={photoUrl} alt={p.name} className="h-10 w-10 rounded-md object-cover" />
-                      ) : (
-                        <div className="h-10 w-10 rounded-md bg-gray-100" />
-                      )}
-                    </td>
-                    <td className="py-2 text-gray-900">{p.name}</td>
-                    <td className="py-2 text-gray-700">{p.unit}</td>
-                    <td className="py-2 text-gray-700">{p.sale_price.toFixed(2)}</td>
-                    {currentRole !== "caissier" && currentRole !== "vendeur" && (
-                      <td className="py-2 text-gray-700">{costs[p.id]?.toFixed(2) ?? "—"}</td>
-                    )}
-                    <td className="py-2 text-gray-700">{p.reorder_threshold}</td>
-                    {canWrite && (
-                      <td className="py-2 text-right">
-                        <button
-                          onClick={() => startEdit(p)}
-                          className="rounded-md bg-gray-100 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-200"
-                        >
-                          Modifier
-                        </button>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-gray-500">
+                <tr>
+                  <th className="pb-2">Photo</th>
+                  <th className="pb-2">Nom</th>
+                  <th className="pb-2">Unité</th>
+                  <th className="pb-2">Prix de vente</th>
+                  {currentRole !== "caissier" && currentRole !== "vendeur" && <th className="pb-2">Coût</th>}
+                  <th className="pb-2">Seuil réappro.</th>
+                  {canWrite && <th className="pb-2"></th>}
+                </tr>
+              </thead>
+              <tbody>
+                {products.map((p) => {
+                  const photoUrl = productPhotoUrl(p.image_path);
+                  return (
+                    <tr key={p.id} className="border-t border-gray-100">
+                      <td className="py-2">
+                        {photoUrl ? (
+                          <img src={photoUrl} alt={p.name} className="h-10 w-10 rounded-md object-cover" />
+                        ) : (
+                          <div className="h-10 w-10 rounded-md bg-gray-100" />
+                        )}
                       </td>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      <td className="py-2 text-gray-900">{p.name}</td>
+                      <td className="py-2 text-gray-700">{p.unit}</td>
+                      <td className="py-2 text-gray-700">{p.sale_price.toFixed(2)}</td>
+                      {currentRole !== "caissier" && currentRole !== "vendeur" && (
+                        <td className="py-2 text-gray-700">{costs[p.id]?.toFixed(2) ?? "—"}</td>
+                      )}
+                      <td className="py-2 text-gray-700">{p.reorder_threshold}</td>
+                      {canWrite && (
+                        <td className="py-2 text-right">
+                          <button
+                            onClick={() => startEdit(p)}
+                            className="rounded-md bg-gray-100 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-200"
+                          >
+                            Modifier
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

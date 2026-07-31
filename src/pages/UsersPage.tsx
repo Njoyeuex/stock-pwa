@@ -303,6 +303,7 @@ export function UsersPage() {
         {loading ? (
           <p className="text-sm text-gray-500">Chargement...</p>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-left text-gray-500">
               <tr>
@@ -423,6 +424,7 @@ export function UsersPage() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>
