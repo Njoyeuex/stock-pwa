@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -12,6 +13,8 @@ import {
   UserCog,
   DatabaseBackup,
   LogOut,
+  Menu,
+  X,
 } from "lucide-react";
 import { useAuth, type AppRole, type MembershipPermissions } from "../context/AuthContext";
 import { logout } from "../lib/authApi";
@@ -82,6 +85,7 @@ const NAV_ITEMS: NavItem[] = [
 
 export function Layout() {
   const { currentRole, currentPerms, session, storeName } = useAuth();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const initials = (session?.user.email ?? "?").slice(0, 2).toUpperCase();
 
   const visibleItems = NAV_ITEMS.filter((item) => {
@@ -92,16 +96,49 @@ export function Layout() {
   });
 
   return (
-    <div className="flex min-h-screen bg-gray-100 text-gray-900">
-      <aside className="flex w-64 shrink-0 flex-col border-r border-black/40 bg-black p-4">
-        <div className="mb-8 flex items-center gap-2 px-2">
-          <Logo size={34} />
+    <div className="flex min-h-screen flex-col bg-gray-100 text-gray-900 lg:flex-row">
+      <div className="flex items-center justify-between border-b border-black/40 bg-black px-4 py-3 lg:hidden">
+        <div className="flex items-center gap-2">
+          <Logo size={28} />
           <span className="text-sm font-semibold uppercase tracking-wide text-white">
             {storeName ?? "Manariyo Magasin"}
           </span>
         </div>
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="rounded-md p-2 text-white hover:bg-white/10"
+          aria-label="Ouvrir le menu"
+        >
+          <Menu size={22} />
+        </button>
+      </div>
 
-        <nav className="flex-1 space-y-1">
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-20 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-30 flex w-64 shrink-0 transform flex-col border-r border-black/40 bg-black p-4 transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div className="mb-8 flex items-center justify-between gap-2 px-2">
+          <div className="flex items-center gap-2">
+            <Logo size={34} />
+            <span className="text-sm font-semibold uppercase tracking-wide text-white">
+              {storeName ?? "Manariyo Magasin"}
+            </span>
+          </div>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="rounded-md p-1 text-gray-400 hover:text-white lg:hidden"
+            aria-label="Fermer le menu"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <nav className="flex-1 space-y-1 overflow-y-auto">
           {visibleItems.map((item) => {
             const Icon = item.icon;
             return (
@@ -109,6 +146,7 @@ export function Layout() {
                 key={item.to}
                 to={item.to}
                 end={item.to === "/"}
+                onClick={() => setSidebarOpen(false)}
                 className={({ isActive }) =>
                   `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
                     isActive
