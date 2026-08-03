@@ -98,10 +98,10 @@ export function Layout() {
   return (
     <div className="flex min-h-screen flex-col bg-gray-100 text-gray-900 lg:flex-row">
       <div className="flex items-center justify-between border-b border-black/40 bg-black px-4 py-3 lg:hidden">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <Logo size={28} />
-          <span className="text-sm font-semibold uppercase tracking-wide text-white">
-            {storeName ?? "Manariyo Magasin"}
+          <span className="min-w-0 truncate text-base font-extrabold tracking-tight text-white">
+            {storeName ?? "Magasin Manariyo"}
           </span>
         </div>
         <button
@@ -125,8 +125,8 @@ export function Layout() {
         <div className="mb-8 flex items-center justify-between gap-2 px-2">
           <div className="flex items-center gap-2">
             <Logo size={34} />
-            <span className="text-sm font-semibold uppercase tracking-wide text-white">
-              {storeName ?? "Manariyo Magasin"}
+            <span className="text-lg font-extrabold leading-tight tracking-tight text-white">
+              {storeName ?? "Magasin Manariyo"}
             </span>
           </div>
           <button

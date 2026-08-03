@@ -12,7 +12,8 @@ type Supplier = Tables<"suppliers">;
 const schema = z.object({
   name: z.string().min(2, "Nom trop court").max(150),
   phone: z.string().max(30).optional().or(z.literal("")),
-  email: z.string().email("Email invalide").max(255).optional().or(z.literal("")),
+  nif: z.string().max(50).optional().or(z.literal("")),
+  address: z.string().max(255).optional().or(z.literal("")),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -55,7 +56,8 @@ export function SuppliersPage() {
       org_id: currentOrgId,
       name: values.name,
       phone: values.phone || null,
-      email: values.email || null,
+      nif: values.nif || null,
+      address: values.address || null,
     });
     if (error) {
       setErrorMessage(mapSupabaseError(error));
@@ -81,9 +83,12 @@ export function SuppliersPage() {
           <input className={inputClass} {...register("phone")} />
         </div>
         <div className="space-y-1">
-          <label className="text-sm text-gray-600">Email</label>
-          <input className={inputClass} {...register("email")} />
-          {errors.email && <p className="text-sm text-red-600">{errors.email.message}</p>}
+          <label className="text-sm text-gray-600">NIF</label>
+          <input className={inputClass} placeholder="Numéro d'identification fiscale" {...register("nif")} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-sm text-gray-600">Adresse</label>
+          <input className={inputClass} {...register("address")} />
         </div>
         {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
         <button
@@ -108,7 +113,8 @@ export function SuppliersPage() {
                 <tr>
                   <th className="pb-2">Nom</th>
                   <th className="pb-2">Téléphone</th>
-                  <th className="pb-2">Email</th>
+                  <th className="pb-2">NIF</th>
+                  <th className="pb-2">Adresse</th>
                 </tr>
               </thead>
               <tbody>
@@ -116,7 +122,8 @@ export function SuppliersPage() {
                   <tr key={s.id} className="border-t border-gray-100">
                     <td className="py-2 text-gray-900">{s.name}</td>
                     <td className="py-2 text-gray-700">{s.phone ?? "—"}</td>
-                    <td className="py-2 text-gray-700">{s.email ?? "—"}</td>
+                    <td className="py-2 text-gray-700">{s.nif ?? "—"}</td>
+                    <td className="py-2 text-gray-700">{s.address ?? "—"}</td>
                   </tr>
                 ))}
               </tbody>

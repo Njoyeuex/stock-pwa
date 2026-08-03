@@ -4,6 +4,7 @@ import { Search, Plus } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { productPhotoUrl } from "../lib/productImages";
 import { stockStatus } from "../lib/stockStatus";
+import { formatCurrency } from "../lib/currency";
 import { useAuth } from "../context/AuthContext";
 
 interface InventoryRow {
@@ -164,7 +165,7 @@ export function DashboardPage() {
                       <td className="px-4 py-3 font-medium text-gray-900">{r.name}</td>
                       <td className="px-4 py-3 text-gray-700">{r.category ?? "—"}</td>
                       <td className="px-4 py-3 text-gray-700">{r.quantity}</td>
-                      <td className="px-4 py-3 text-gray-700">{r.sale_price.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-gray-700">{formatCurrency(r.sale_price)}</td>
                       <td className="px-4 py-3 text-gray-500">
                         {new Date(r.updated_at).toLocaleString("fr-FR", {
                           hour: "2-digit",

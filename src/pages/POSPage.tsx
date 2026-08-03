@@ -18,6 +18,7 @@ import {
 import { supabase } from "../lib/supabaseClient";
 import { mapSupabaseError } from "../lib/errorMessages";
 import { stockStatus } from "../lib/stockStatus";
+import { formatCurrency } from "../lib/currency";
 import { ROLE_LABELS } from "../lib/roles";
 import { useAuth } from "../context/AuthContext";
 import { ReceiptTicket, type ReceiptData } from "../components/ReceiptTicket";
@@ -454,6 +455,10 @@ export function POSPage() {
       setErrorMessage("Choisissez un client pour une vente à crédit.");
       return;
     }
+    if (paymentMethod === "cash" && !caisseSession) {
+      setErrorMessage("Ouvrez la caisse avant d'encaisser une vente en espèces.");
+      return;
+    }
     setErrorMessage(null);
     setSubmitting(true);
 
@@ -521,7 +526,7 @@ export function POSPage() {
         createdAt: new Date().toISOString(),
         cashierName,
         paymentMethodLabel: PAYMENT_METHODS.find((m) => m.value === paymentMethod)?.label ?? paymentMethod,
-        lines: cart.map((l) => ({ name: l.name, quantity: l.quantity, unit_price: l.unit_price })),
+        lines: cart.map((l) => ({ name: l.name, sku: l.sku, quantity: l.quantity, unit_price: l.unit_price })),
         total,
         offline: true,
       });
@@ -541,7 +546,7 @@ export function POSPage() {
         createdAt: saleRow?.created_at ?? new Date().toISOString(),
         cashierName,
         paymentMethodLabel: PAYMENT_METHODS.find((m) => m.value === paymentMethod)?.label ?? paymentMethod,
-        lines: cart.map((l) => ({ name: l.name, quantity: l.quantity, unit_price: l.unit_price })),
+        lines: cart.map((l) => ({ name: l.name, sku: l.sku, quantity: l.quantity, unit_price: l.unit_price })),
         total: saleRow?.total_amount ?? total,
       });
     }
@@ -632,7 +637,7 @@ export function POSPage() {
             <>
               <div className="flex items-center gap-2 text-sm text-gray-700">
                 <Wallet size={16} className="text-emerald-600" />
-                Caisse ouverte — fonds initial : {caisseSession.opening_float.toFixed(0)}
+                Caisse ouverte — fonds initial : {formatCurrency(caisseSession.opening_float)}
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -681,10 +686,10 @@ export function POSPage() {
       {closeResult && (
         <div className="flex items-center justify-between bg-white px-4 py-3 text-sm sm:px-8">
           <span>
-            Caisse fermée — attendu : {closeResult.expected.toFixed(0)}, écart :{" "}
+            Caisse fermée — attendu : {formatCurrency(closeResult.expected)}, écart :{" "}
             <span className={closeResult.variance === 0 ? "text-emerald-600" : "text-amber-600"}>
               {closeResult.variance > 0 ? "+" : ""}
-              {closeResult.variance.toFixed(0)}
+              {formatCurrency(closeResult.variance)}
             </span>
           </span>
           <button onClick={() => setCloseResult(null)} className="text-gray-400 hover:text-gray-900">
@@ -746,7 +751,7 @@ export function POSPage() {
                           {item.sku ?? (item.kind === "service" ? "Service" : "—")}
                         </p>
                         <div className="flex items-center justify-between">
-                          <span className="font-semibold text-red-600">{item.price.toFixed(0)}</span>
+                          <span className="font-semibold text-red-600">{formatCurrency(item.price)}</span>
                           {item.kind === "product" && (
                             <span
                               className={`rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -812,7 +817,7 @@ export function POSPage() {
                         </button>
                       </div>
                       <span className="text-sm font-medium text-red-600">
-                        {(l.unit_price * l.quantity).toFixed(0)}
+                        {formatCurrency(l.unit_price * l.quantity)}
                       </span>
                     </div>
                   </div>
@@ -842,24 +847,32 @@ export function POSPage() {
                   />
                 )}
                 <div className="grid grid-cols-2 gap-1.5">
-                  {PAYMENT_METHODS.map((m) => (
-                    <button
-                      key={m.value}
-                      onClick={() => setPaymentMethod(m.value)}
-                      className={`rounded-md py-1.5 text-xs font-medium ${
-                        paymentMethod === m.value
-                          ? "bg-blue-900 text-white"
-                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                      }`}
-                    >
-                      {m.label}
-                    </button>
-                  ))}
+                  {PAYMENT_METHODS.map((m) => {
+                    const disabled = m.value === "cash" && !caisseSession;
+                    return (
+                      <button
+                        key={m.value}
+                        onClick={() => setPaymentMethod(m.value)}
+                        disabled={disabled}
+                        title={disabled ? "Ouvrez la caisse pour encaisser en espèces." : undefined}
+                        className={`rounded-md py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${
+                          paymentMethod === m.value
+                            ? "bg-blue-900 text-white"
+                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        }`}
+                      >
+                        {m.label}
+                      </button>
+                    );
+                  })}
                 </div>
+                {paymentMethod === "cash" && !caisseSession && (
+                  <p className="text-xs text-amber-600">Ouvrez la caisse pour encaisser en espèces.</p>
+                )}
                 {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
                 <div className="flex items-center justify-between text-lg font-semibold text-gray-900">
                   <span>Total</span>
-                  <span className="text-red-600">{total.toFixed(0)}</span>
+                  <span className="text-red-600">{formatCurrency(total)}</span>
                 </div>
                 <button
                   onClick={finalizeSale}

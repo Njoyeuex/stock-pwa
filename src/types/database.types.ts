@@ -637,36 +637,49 @@ export type Database = {
       }
       purchases: {
         Row: {
+          caisse_session_id: string | null
           created_at: string
           created_by: string
           id: string
           org_id: string
+          payment_source: string
           status: string
           store_id: string
           supplier_id: string | null
           total_amount: number
         }
         Insert: {
+          caisse_session_id?: string | null
           created_at?: string
           created_by: string
           id?: string
           org_id: string
+          payment_source?: string
           status?: string
           store_id: string
           supplier_id?: string | null
           total_amount?: number
         }
         Update: {
+          caisse_session_id?: string | null
           created_at?: string
           created_by?: string
           id?: string
           org_id?: string
+          payment_source?: string
           status?: string
           store_id?: string
           supplier_id?: string | null
           total_amount?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "purchases_caisse_session_id_fkey"
+            columns: ["caisse_session_id"]
+            isOneToOne: false
+            referencedRelation: "caisse_sessions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "purchases_org_id_fkey"
             columns: ["org_id"]
@@ -961,29 +974,32 @@ export type Database = {
       }
       suppliers: {
         Row: {
+          address: string | null
           created_at: string
-          email: string | null
           id: string
           is_active: boolean
           name: string
+          nif: string | null
           org_id: string
           phone: string | null
         }
         Insert: {
+          address?: string | null
           created_at?: string
-          email?: string | null
           id?: string
           is_active?: boolean
           name: string
+          nif?: string | null
           org_id: string
           phone?: string | null
         }
         Update: {
+          address?: string | null
           created_at?: string
-          email?: string | null
           id?: string
           is_active?: boolean
           name?: string
+          nif?: string | null
           org_id?: string
           phone?: string | null
         }
@@ -1085,8 +1101,10 @@ export type Database = {
       }
       receive_purchase: {
         Args: {
+          p_caisse_session_id?: string
           p_lines: Json
           p_org_id: string
+          p_payment_source?: string
           p_store_id: string
           p_supplier_id: string
         }

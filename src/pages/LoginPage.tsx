@@ -76,10 +76,10 @@ export function LoginPage() {
         className="w-full max-w-sm space-y-4 rounded-xl bg-white p-8 shadow-md"
       >
         <div className="flex items-center gap-3">
-          <Logo size={40} />
+          <Logo size={44} />
           <div>
-            <p className="text-xs uppercase tracking-wide text-gray-500">Manariyo Magasin</p>
-            <h1 className="text-xl font-semibold text-gray-900">Connexion</h1>
+            <h1 className="text-2xl font-extrabold leading-tight tracking-tight text-gray-900">Magasin Manariyo</h1>
+            <p className="text-sm text-gray-500">Connexion</p>
           </div>
         </div>
 

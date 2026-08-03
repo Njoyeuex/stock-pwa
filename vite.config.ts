@@ -10,9 +10,9 @@ export default defineConfig({
       manifestFilename: "manifest.json",
       includeAssets: ["icons/icon-192.svg", "icons/icon-512.svg"],
       manifest: {
-        name: "Manariyo Magasin",
-        short_name: "Manariyo Magasin",
-        description: "Manariyo Magasin — gestion de stock, achats, caisse et facturation",
+        name: "Magasin Manariyo",
+        short_name: "Magasin Manariyo",
+        description: "Magasin Manariyo — gestion de stock, achats, caisse et facturation",
         lang: "fr",
         start_url: "/",
         scope: "/",

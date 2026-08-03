@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, AlertTriangle, FileClock } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { mapSupabaseError } from "../lib/errorMessages";
+import { formatCurrency } from "../lib/currency";
 import { useAuth } from "../context/AuthContext";
 import type { Tables } from "../types/database.types";
 
@@ -174,7 +175,7 @@ export function ReportPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-xl bg-white p-6 shadow-sm">
               <p className="text-sm text-gray-500">Total des ventes</p>
-              <p className="mt-1 text-3xl font-semibold text-emerald-600">{totalAmount.toFixed(0)}</p>
+              <p className="mt-1 text-3xl font-semibold text-emerald-600">{formatCurrency(totalAmount)}</p>
             </div>
             <div className="rounded-xl bg-white p-6 shadow-sm">
               <p className="text-sm text-gray-500">Nombre de ventes</p>
@@ -182,23 +183,23 @@ export function ReportPage() {
             </div>
             <div className="rounded-xl bg-white p-6 shadow-sm">
               <p className="text-sm text-gray-500">Espèces</p>
-              <p className="mt-1 text-3xl font-semibold text-gray-900">{(totalsByMethod.cash ?? 0).toFixed(0)}</p>
+              <p className="mt-1 text-3xl font-semibold text-gray-900">{formatCurrency(totalsByMethod.cash ?? 0)}</p>
             </div>
             <div className="rounded-xl bg-white p-6 shadow-sm">
               <p className="text-sm text-gray-500">À crédit</p>
-              <p className="mt-1 text-3xl font-semibold text-amber-600">{(totalsByMethod.credit ?? 0).toFixed(0)}</p>
+              <p className="mt-1 text-3xl font-semibold text-amber-600">{formatCurrency(totalsByMethod.credit ?? 0)}</p>
             </div>
             <div className="rounded-xl bg-white p-6 shadow-sm">
               <p className="text-sm text-gray-500">Services rendus</p>
-              <p className="mt-1 text-3xl font-semibold text-gray-900">{servicesTotal.toFixed(0)}</p>
+              <p className="mt-1 text-3xl font-semibold text-gray-900">{formatCurrency(servicesTotal)}</p>
             </div>
             <div className="rounded-xl bg-white p-6 shadow-sm">
               <p className="text-sm text-gray-500">Entrées de caisse</p>
-              <p className="mt-1 text-3xl font-semibold text-emerald-600">{cashIn.toFixed(0)}</p>
+              <p className="mt-1 text-3xl font-semibold text-emerald-600">{formatCurrency(cashIn)}</p>
             </div>
             <div className="rounded-xl bg-white p-6 shadow-sm">
               <p className="text-sm text-gray-500">Sorties de caisse</p>
-              <p className="mt-1 text-3xl font-semibold text-red-600">{cashOut.toFixed(0)}</p>
+              <p className="mt-1 text-3xl font-semibold text-red-600">{formatCurrency(cashOut)}</p>
             </div>
           </div>
 
@@ -241,7 +242,7 @@ export function ReportPage() {
                           <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700">Annulée</span>
                         )}
                       </td>
-                      <td className="py-2 text-gray-900">{s.total_amount.toFixed(0)}</td>
+                      <td className="py-2 text-gray-900">{formatCurrency(s.total_amount)}</td>
                       {canVoid && (
                         <td className="py-2 text-right">
                           {s.status === "completed" &&
@@ -298,7 +299,7 @@ export function ReportPage() {
                     <span>
                       {l.services?.name ?? "—"} <span className="text-gray-500">× {l.quantity}</span>
                     </span>
-                    <span className="font-medium">{l.line_total.toFixed(0)}</span>
+                    <span className="font-medium">{formatCurrency(l.line_total)}</span>
                   </li>
                 ))}
               </ul>

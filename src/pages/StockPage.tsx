@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { Search } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { mapSupabaseError } from "../lib/errorMessages";
 import { useAuth } from "../context/AuthContext";
@@ -35,8 +36,26 @@ export function StockPage() {
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
+
+  const [productQuery, setProductQuery] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  const filteredProducts = useMemo(() => {
+    const q = productQuery.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter(
+      (p) => p.name.toLowerCase().includes(q) || (p.sku ?? "").toLowerCase().includes(q),
+    );
+  }, [products, productQuery]);
+
+  function selectProduct(p: Product) {
+    setValue("product_id", p.id, { shouldValidate: true });
+    setProductQuery(p.name);
+    setShowSuggestions(false);
+  }
 
   async function loadAll() {
     if (!currentOrgId) return;
@@ -73,6 +92,7 @@ export function StockPage() {
 
     setSuccessMessage("Stock ajusté.");
     reset();
+    setProductQuery("");
     await loadAll();
   }
 
@@ -82,16 +102,43 @@ export function StockPage() {
 
       <form onSubmit={handleSubmit(onSubmit)} className="max-w-xl space-y-3 rounded-xl bg-white p-6 shadow-sm">
         <h2 className="font-medium text-gray-900">Ajustement manuel</h2>
-        <div className="space-y-1">
+        <div className="relative space-y-1">
           <label className="text-sm text-gray-600">Produit</label>
-          <select className="w-full rounded-md border border-gray-300 px-3 py-2" {...register("product_id")}>
-            <option value="">Choisir...</option>
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          <input type="hidden" {...register("product_id")} />
+          <div className="relative">
+            <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              value={productQuery}
+              onChange={(e) => {
+                setProductQuery(e.target.value);
+                setValue("product_id", "", { shouldValidate: false });
+                setShowSuggestions(true);
+              }}
+              onFocus={() => setShowSuggestions(true)}
+              onBlur={() => setShowSuggestions(false)}
+              placeholder="Rechercher un produit par nom ou code..."
+              className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-900"
+            />
+          </div>
+          {showSuggestions && (
+            <div className="absolute z-10 max-h-56 w-full overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg">
+              {filteredProducts.length === 0 ? (
+                <p className="px-3 py-2 text-sm text-gray-500">Aucun produit trouvé.</p>
+              ) : (
+                filteredProducts.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onMouseDown={() => selectProduct(p)}
+                    className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50"
+                  >
+                    <span className="text-gray-900">{p.name}</span>
+                    {p.sku && <span className="text-xs text-gray-400">{p.sku}</span>}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
           {errors.product_id && <p className="text-sm text-red-600">{errors.product_id.message}</p>}
         </div>
         <div className="grid grid-cols-2 gap-3">

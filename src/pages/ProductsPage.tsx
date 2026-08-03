@@ -5,6 +5,7 @@ import { z } from "zod";
 import { supabase } from "../lib/supabaseClient";
 import { mapSupabaseError } from "../lib/errorMessages";
 import { productPhotoUrl } from "../lib/productImages";
+import { formatCurrency } from "../lib/currency";
 import { useAuth } from "../context/AuthContext";
 import type { Tables } from "../types/database.types";
 
@@ -330,9 +331,11 @@ export function ProductsPage() {
                       </td>
                       <td className="py-2 text-gray-900">{p.name}</td>
                       <td className="py-2 text-gray-700">{p.unit}</td>
-                      <td className="py-2 text-gray-700">{p.sale_price.toFixed(2)}</td>
+                      <td className="py-2 text-gray-700">{formatCurrency(p.sale_price)}</td>
                       {currentRole !== "caissier" && currentRole !== "vendeur" && (
-                        <td className="py-2 text-gray-700">{costs[p.id]?.toFixed(2) ?? "—"}</td>
+                        <td className="py-2 text-gray-700">
+                          {costs[p.id] !== undefined ? formatCurrency(costs[p.id]) : "—"}
+                        </td>
                       )}
                       <td className="py-2 text-gray-700">{p.reorder_threshold}</td>
                       {canWrite && (

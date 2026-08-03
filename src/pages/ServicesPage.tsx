@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "../lib/supabaseClient";
 import { mapSupabaseError } from "../lib/errorMessages";
+import { formatCurrency } from "../lib/currency";
 import { useAuth } from "../context/AuthContext";
 import type { Tables } from "../types/database.types";
 
@@ -153,7 +154,7 @@ export function ServicesPage() {
                   <tr key={s.id} className="border-t border-gray-100">
                     <td className="py-2 text-gray-900">{s.name}</td>
                     <td className="py-2 text-gray-500">{s.description ?? "—"}</td>
-                    <td className="py-2 text-gray-700">{s.price.toFixed(2)}</td>
+                    <td className="py-2 text-gray-700">{formatCurrency(s.price)}</td>
                     {canWrite && (
                       <td className="py-2 text-right">
                         <button

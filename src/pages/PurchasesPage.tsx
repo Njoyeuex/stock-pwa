@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "../lib/supabaseClient";
 import { mapSupabaseError } from "../lib/errorMessages";
+import { formatCurrency } from "../lib/currency";
 import { useAuth } from "../context/AuthContext";
 import type { Tables } from "../types/database.types";
 
@@ -11,8 +12,11 @@ type Supplier = Tables<"suppliers">;
 type Product = Tables<"products">;
 type Purchase = Tables<"purchases">;
 
+const PAYMENT_SOURCE_LABELS: Record<string, string> = { caisse: "Caisse", other: "Autre" };
+
 const schema = z.object({
   supplier_id: z.string().uuid("Choisir un fournisseur").optional().or(z.literal("")),
+  payment_source: z.enum(["caisse", "other"]),
   lines: z
     .array(
       z.object({
@@ -31,6 +35,7 @@ export function PurchasesPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [openCaisseSessionId, setOpenCaisseSessionId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -39,38 +44,54 @@ export function PurchasesPage() {
     control,
     handleSubmit,
     reset,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { lines: [{ product_id: "", quantity: 1, unit_cost: 0 }] },
+    defaultValues: { payment_source: "other", lines: [{ product_id: "", quantity: 1, unit_cost: 0 }] },
   });
 
+  const paymentSource = watch("payment_source");
   const { fields, append, remove } = useFieldArray({ control, name: "lines" });
 
   async function loadAll() {
     if (!currentOrgId) return;
-    const [{ data: suppliersData }, { data: productsData }, { data: purchasesData }] = await Promise.all([
-      supabase.from("suppliers").select("*").eq("org_id", currentOrgId).order("name"),
-      supabase.from("products").select("*").eq("org_id", currentOrgId).order("name"),
-      supabase
-        .from("purchases")
-        .select("*")
-        .eq("org_id", currentOrgId)
-        .order("created_at", { ascending: false })
-        .limit(20),
-    ]);
+    const [{ data: suppliersData }, { data: productsData }, { data: purchasesData }, { data: sessionData }] =
+      await Promise.all([
+        supabase.from("suppliers").select("*").eq("org_id", currentOrgId).order("name"),
+        supabase.from("products").select("*").eq("org_id", currentOrgId).order("name"),
+        supabase
+          .from("purchases")
+          .select("*")
+          .eq("org_id", currentOrgId)
+          .order("created_at", { ascending: false })
+          .limit(20),
+        currentStoreId
+          ? supabase
+              .from("caisse_sessions")
+              .select("id")
+              .eq("store_id", currentStoreId)
+              .eq("status", "open")
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
     setSuppliers(suppliersData ?? []);
     setProducts(productsData ?? []);
     setPurchases(purchasesData ?? []);
+    setOpenCaisseSessionId(sessionData?.id ?? null);
   }
 
   useEffect(() => {
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentOrgId]);
+  }, [currentOrgId, currentStoreId]);
 
   async function onSubmit(values: FormValues) {
     if (!currentOrgId || !currentStoreId) return;
+    if (values.payment_source === "caisse" && !openCaisseSessionId) {
+      setErrorMessage("Aucune caisse ouverte. Ouvrez la caisse ou choisissez une autre provenance.");
+      return;
+    }
     setErrorMessage(null);
     setSuccessMessage(null);
 
@@ -79,6 +100,8 @@ export function PurchasesPage() {
       p_store_id: currentStoreId,
       p_supplier_id: (values.supplier_id || null) as string,
       p_lines: values.lines,
+      p_payment_source: values.payment_source,
+      p_caisse_session_id: values.payment_source === "caisse" ? openCaisseSessionId ?? undefined : undefined,
     });
 
     if (error) {
@@ -86,8 +109,16 @@ export function PurchasesPage() {
       return;
     }
 
-    setSuccessMessage("Achat enregistré, stock mis à jour.");
-    reset({ supplier_id: values.supplier_id, lines: [{ product_id: "", quantity: 1, unit_cost: 0 }] });
+    setSuccessMessage(
+      values.payment_source === "caisse"
+        ? "Achat enregistré, stock mis à jour et montant débité de la caisse."
+        : "Achat enregistré, stock mis à jour.",
+    );
+    reset({
+      supplier_id: values.supplier_id,
+      payment_source: values.payment_source,
+      lines: [{ product_id: "", quantity: 1, unit_cost: 0 }],
+    });
     await loadAll();
   }
 
@@ -111,6 +142,32 @@ export function PurchasesPage() {
               </option>
             ))}
           </select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-sm text-gray-600">Provenance des fonds</label>
+          <div className="grid grid-cols-2 gap-1.5">
+            {(["other", "caisse"] as const).map((value) => (
+              <label
+                key={value}
+                className={`flex cursor-pointer items-center justify-center rounded-md py-2 text-sm font-medium ${
+                  paymentSource === value ? "bg-blue-900 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                <input type="radio" value={value} className="sr-only" {...register("payment_source")} />
+                {PAYMENT_SOURCE_LABELS[value]}
+              </label>
+            ))}
+          </div>
+          {paymentSource === "caisse" && !openCaisseSessionId && (
+            <p className="text-xs text-amber-600">
+              Aucune caisse ouverte actuellement — ouvrez-la depuis la page Caisse pour payer un achat depuis la
+              caisse.
+            </p>
+          )}
+          {paymentSource === "caisse" && openCaisseSessionId && (
+            <p className="text-xs text-gray-400">Le montant total sera débité de la caisse actuellement ouverte.</p>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -146,7 +203,7 @@ export function PurchasesPage() {
               <input
                 type="number"
                 step="0.01"
-                placeholder="Coût unitaire"
+                placeholder="Coût unitaire (FBU)"
                 className="w-full rounded-md border border-gray-300 px-3 py-2"
                 {...register(`lines.${index}.unit_cost` as const)}
               />
@@ -192,6 +249,7 @@ export function PurchasesPage() {
                 <tr>
                   <th className="pb-2">Date</th>
                   <th className="pb-2">Statut</th>
+                  <th className="pb-2">Provenance</th>
                   <th className="pb-2">Total</th>
                 </tr>
               </thead>
@@ -200,7 +258,8 @@ export function PurchasesPage() {
                   <tr key={p.id} className="border-t border-gray-100">
                     <td className="py-2 text-gray-900">{new Date(p.created_at).toLocaleString("fr-FR")}</td>
                     <td className="py-2 capitalize text-gray-700">{p.status}</td>
-                    <td className="py-2 text-gray-900">{p.total_amount.toFixed(2)}</td>
+                    <td className="py-2 text-gray-700">{PAYMENT_SOURCE_LABELS[p.payment_source] ?? p.payment_source}</td>
+                    <td className="py-2 text-gray-900">{formatCurrency(p.total_amount)}</td>
                   </tr>
                 ))}
               </tbody>

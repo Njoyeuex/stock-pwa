@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "../lib/supabaseClient";
 import { mapSupabaseError } from "../lib/errorMessages";
+import { formatCurrency } from "../lib/currency";
 import { useAuth } from "../context/AuthContext";
 import type { Tables } from "../types/database.types";
 
@@ -145,7 +146,7 @@ export function CustomersPage() {
                   <td className="py-2 text-gray-900">{c.name}</td>
                   <td className="py-2 text-gray-700">{c.phone ?? "—"}</td>
                   <td className={`py-2 font-medium ${c.balance > 0 ? "text-amber-600" : "text-gray-500"}`}>
-                    {c.balance.toFixed(0)}
+                    {formatCurrency(c.balance)}
                   </td>
                   <td className="py-2 text-right">
                     {c.balance > 0 &&
