@@ -102,7 +102,9 @@ export function POSPage() {
   const [caisseSession, setCaisseSession] = useState<CaisseSession | null>(null);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [openingFloat, setOpeningFloat] = useState("");
+  const [lastClosingAmount, setLastClosingAmount] = useState<number | null>(null);
   const [sessionError, setSessionError] = useState<string | null>(null);
+  const [amountReceived, setAmountReceived] = useState("");
   const [showCashMovement, setShowCashMovement] = useState(false);
   const [cashMovementType, setCashMovementType] = useState<"in" | "out">("in");
   const [cashMovementAmount, setCashMovementAmount] = useState("");
@@ -117,8 +119,6 @@ export function POSPage() {
   const [pendingCount, setPendingCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
-
-  const sessionRequired = currentRole === "caissier";
 
   async function refreshPendingCount() {
     setPendingCount(await getPendingSalesCount());
@@ -205,6 +205,25 @@ export function POSPage() {
       sessionId: data?.id ?? null,
       openingFloat: data?.opening_float ?? null,
     });
+
+    if (!data) {
+      // Suggest picking up where the till was left last time, so the cashier only
+      // has to confirm or adjust it rather than guess a starting amount from scratch.
+      const { data: lastClosed } = await supabase
+        .from("caisse_sessions")
+        .select("closing_declared_cash")
+        .eq("store_id", currentStoreId)
+        .eq("status", "closed")
+        .order("closed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const amount = lastClosed?.closing_declared_cash ?? null;
+      setLastClosingAmount(amount);
+      setOpeningFloat(amount !== null ? String(amount) : "");
+    } else {
+      setLastClosingAmount(null);
+    }
+
     setSessionLoading(false);
   }
 
@@ -556,6 +575,7 @@ export function POSPage() {
     setPaymentMethod("cash");
     setCustomerName("");
     setSelectedCustomerId("");
+    setAmountReceived("");
     setProducts((prev) =>
       prev.map((p) => {
         const line = cart.find((l) => l.kind === "product" && l.id === p.id);
@@ -655,28 +675,10 @@ export function POSPage() {
               </div>
             </>
           ) : (
-            <>
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <Lock size={16} />
-                Caisse fermée
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  step="0.01"
-                  value={openingFloat}
-                  onChange={(e) => setOpeningFloat(e.target.value)}
-                  placeholder="Fonds initial"
-                  className="w-32 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
-                />
-                <button
-                  onClick={openSession}
-                  className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
-                >
-                  Ouvrir la caisse
-                </button>
-              </div>
-            </>
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <Lock size={16} />
+              Caisse fermée — ouvrez-la ci-dessous pour commencer à vendre.
+            </div>
           )}
         </div>
       )}
@@ -699,14 +701,42 @@ export function POSPage() {
       )}
 
       <div className="flex flex-1 flex-col gap-6 p-4 lg:flex-row lg:p-8">
-        <div className="flex-1 space-y-4">
-          {sessionRequired && currentStoreId && !sessionLoading && !caisseSession ? (
-            <div className="flex flex-col items-center justify-center gap-2 rounded-xl bg-white py-20 text-center">
-              <Lock size={32} className="text-gray-300" />
-              <p className="text-gray-600">Ouvrez la caisse pour commencer à vendre.</p>
+        {currentStoreId && !sessionLoading && !caisseSession ? (
+          <div className="flex flex-1 items-center justify-center">
+            <div className="w-full max-w-sm rounded-xl bg-white p-8 text-center shadow-sm">
+              <Lock size={32} className="mx-auto mb-3 text-gray-300" />
+              <h2 className="mb-1 text-lg font-semibold text-gray-900">Ouvrez la caisse pour commencer</h2>
+              <p className="mb-4 text-sm text-gray-500">
+                Aucune vente ne peut être enregistrée tant que la caisse n'est pas ouverte.
+              </p>
+              {lastClosingAmount !== null && (
+                <p className="mb-3 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-500">
+                  Montant à la dernière clôture : {formatCurrency(lastClosingAmount)}. Gardez ce montant ou
+                  ajustez-le si vous ajoutez des espèces.
+                </p>
+              )}
+              <div className="space-y-2">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={openingFloat}
+                  onChange={(e) => setOpeningFloat(e.target.value)}
+                  placeholder="Fonds initial"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-center text-sm"
+                />
+                {sessionError && <p className="text-sm text-red-600">{sessionError}</p>}
+                <button
+                  onClick={openSession}
+                  className="w-full rounded-md bg-red-600 py-2 text-sm font-medium text-white hover:bg-red-700"
+                >
+                  Ouvrir la caisse
+                </button>
+              </div>
             </div>
-          ) : (
-            <>
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 space-y-4">
               <div className="relative">
                 <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
@@ -767,127 +797,152 @@ export function POSPage() {
                   })}
                 </div>
               )}
-            </>
-          )}
-        </div>
-
-        <div className="w-full overflow-hidden rounded-xl bg-white shadow-sm lg:w-80 lg:shrink-0">
-          <div className="flex items-center gap-2 bg-blue-900 px-4 py-3 font-medium text-white">
-            <ShoppingCart size={18} />
-            Article à vendre
-          </div>
-
-          {cart.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-2 px-6 py-16 text-center">
-              <ShoppingCart size={40} className="text-gray-200" />
-              <p className="text-gray-600">Aucun article à vendre</p>
-              <p className="text-xs text-gray-400">Cliquez sur un produit ou un service pour l'ajouter</p>
             </div>
-          ) : (
-            <div className="flex flex-col">
-              <div className="max-h-[50vh] space-y-3 overflow-y-auto p-4">
-                {cart.map((l) => (
-                  <div key={`${l.kind}-${l.id}`} className="rounded-lg bg-gray-50 p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{l.name}</p>
-                        <p className="text-xs text-gray-500">{l.sku ?? (l.kind === "service" ? "Service" : "—")}</p>
-                      </div>
-                      <button
-                        onClick={() => removeFromCart(l.kind, l.id)}
-                        className="text-gray-400 hover:text-red-600"
-                      >
-                        <X size={16} />
-                      </button>
-                    </div>
-                    <div className="mt-2 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => updateQuantity(l.kind, l.id, -1)}
-                          className="rounded bg-gray-200 p-1 text-gray-700 hover:bg-gray-300"
-                        >
-                          <Minus size={14} />
-                        </button>
-                        <span className="w-6 text-center text-sm text-gray-900">{l.quantity}</span>
-                        <button
-                          onClick={() => updateQuantity(l.kind, l.id, 1)}
-                          className="rounded bg-gray-200 p-1 text-gray-700 hover:bg-gray-300"
-                        >
-                          <Plus size={14} />
-                        </button>
-                      </div>
-                      <span className="text-sm font-medium text-red-600">
-                        {formatCurrency(l.unit_price * l.quantity)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+
+            <div className="w-full overflow-hidden rounded-xl bg-white shadow-sm lg:w-80 lg:shrink-0">
+              <div className="flex items-center gap-2 bg-blue-900 px-4 py-3 font-medium text-white">
+                <ShoppingCart size={18} />
+                Article à vendre
               </div>
 
-              <div className="space-y-3 border-t border-gray-200 p-4">
-                {paymentMethod === "credit" ? (
-                  <select
-                    value={selectedCustomerId}
-                    onChange={(e) => setSelectedCustomerId(e.target.value)}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  >
-                    <option value="">Choisir un client...</option>
-                    {customers.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
+              {cart.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-2 px-6 py-16 text-center">
+                  <ShoppingCart size={40} className="text-gray-200" />
+                  <p className="text-gray-600">Aucun article à vendre</p>
+                  <p className="text-xs text-gray-400">Cliquez sur un produit ou un service pour l'ajouter</p>
+                </div>
+              ) : (
+                <div className="flex flex-col">
+                  <div className="max-h-[50vh] space-y-3 overflow-y-auto p-4">
+                    {cart.map((l) => (
+                      <div key={`${l.kind}-${l.id}`} className="rounded-lg bg-gray-50 p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{l.name}</p>
+                            <p className="text-xs text-gray-500">
+                              {l.sku ?? (l.kind === "service" ? "Service" : "—")}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => removeFromCart(l.kind, l.id)}
+                            className="text-gray-400 hover:text-red-600"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                        <div className="mt-2 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => updateQuantity(l.kind, l.id, -1)}
+                              className="rounded bg-gray-200 p-1 text-gray-700 hover:bg-gray-300"
+                            >
+                              <Minus size={14} />
+                            </button>
+                            <span className="w-6 text-center text-sm text-gray-900">{l.quantity}</span>
+                            <button
+                              onClick={() => updateQuantity(l.kind, l.id, 1)}
+                              className="rounded bg-gray-200 p-1 text-gray-700 hover:bg-gray-300"
+                            >
+                              <Plus size={14} />
+                            </button>
+                          </div>
+                          <span className="text-sm font-medium text-red-600">
+                            {formatCurrency(l.unit_price * l.quantity)}
+                          </span>
+                        </div>
+                      </div>
                     ))}
-                  </select>
-                ) : (
-                  <input
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    placeholder="Nom du client (optionnel)"
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  />
-                )}
-                <div className="grid grid-cols-2 gap-1.5">
-                  {PAYMENT_METHODS.map((m) => {
-                    const disabled = m.value === "cash" && !caisseSession;
-                    return (
-                      <button
-                        key={m.value}
-                        onClick={() => setPaymentMethod(m.value)}
-                        disabled={disabled}
-                        title={disabled ? "Ouvrez la caisse pour encaisser en espèces." : undefined}
-                        className={`rounded-md py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${
-                          paymentMethod === m.value
-                            ? "bg-blue-900 text-white"
-                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                        }`}
+                  </div>
+
+                  <div className="space-y-3 border-t border-gray-200 p-4">
+                    {paymentMethod === "credit" ? (
+                      <select
+                        value={selectedCustomerId}
+                        onChange={(e) => setSelectedCustomerId(e.target.value)}
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                       >
-                        {m.label}
-                      </button>
-                    );
-                  })}
+                        <option value="">Choisir un client...</option>
+                        {customers.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                        placeholder="Nom du client (optionnel)"
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                      />
+                    )}
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {PAYMENT_METHODS.map((m) => {
+                        const disabled = m.value === "cash" && !caisseSession;
+                        return (
+                          <button
+                            key={m.value}
+                            onClick={() => setPaymentMethod(m.value)}
+                            disabled={disabled}
+                            title={disabled ? "Ouvrez la caisse pour encaisser en espèces." : undefined}
+                            className={`rounded-md py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${
+                              paymentMethod === m.value
+                                ? "bg-blue-900 text-white"
+                                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                            }`}
+                          >
+                            {m.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {paymentMethod === "cash" && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-gray-500">Montant reçu du client</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={amountReceived}
+                          onChange={(e) => setAmountReceived(e.target.value)}
+                          placeholder="Montant payé"
+                          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                        />
+                        {amountReceived !== "" &&
+                          (Number(amountReceived) >= total ? (
+                            <p className="text-xs text-emerald-600">
+                              Monnaie à rendre : {formatCurrency(Number(amountReceived) - total)}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-red-600">
+                              Montant insuffisant (manque {formatCurrency(total - Number(amountReceived))})
+                            </p>
+                          ))}
+                      </div>
+                    )}
+                    {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
+                    <div className="flex items-center justify-between text-lg font-semibold text-gray-900">
+                      <span>Total</span>
+                      <span className="text-red-600">{formatCurrency(total)}</span>
+                    </div>
+                    <button
+                      onClick={finalizeSale}
+                      disabled={
+                        submitting ||
+                        (paymentMethod === "cash" && (amountReceived === "" || Number(amountReceived) < total))
+                      }
+                      className="w-full rounded-md bg-red-600 py-2.5 font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {submitting ? "Traitement..." : "Enregistrer la vente"}
+                    </button>
+                    <p className="text-center text-xs text-gray-400">
+                      L'impression du ticket est facultative et se fait après l'enregistrement.
+                    </p>
+                  </div>
                 </div>
-                {paymentMethod === "cash" && !caisseSession && (
-                  <p className="text-xs text-amber-600">Ouvrez la caisse pour encaisser en espèces.</p>
-                )}
-                {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
-                <div className="flex items-center justify-between text-lg font-semibold text-gray-900">
-                  <span>Total</span>
-                  <span className="text-red-600">{formatCurrency(total)}</span>
-                </div>
-                <button
-                  onClick={finalizeSale}
-                  disabled={submitting}
-                  className="w-full rounded-md bg-red-600 py-2.5 font-medium text-white hover:bg-red-700 disabled:opacity-50"
-                >
-                  {submitting ? "Traitement..." : "Enregistrer la vente"}
-                </button>
-                <p className="text-center text-xs text-gray-400">
-                  L'impression du ticket est facultative et se fait après l'enregistrement.
-                </p>
-              </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
 
       {showCashMovement && (
