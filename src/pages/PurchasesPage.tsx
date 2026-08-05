@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Lock } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { mapSupabaseError } from "../lib/errorMessages";
 import { formatCurrency } from "../lib/currency";
@@ -38,7 +37,6 @@ export function PurchasesPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [openCaisseSessionId, setOpenCaisseSessionId] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -82,7 +80,6 @@ export function PurchasesPage() {
     setProducts(productsData ?? []);
     setPurchases(purchasesData ?? []);
     setOpenCaisseSessionId(sessionData?.id ?? null);
-    setLoaded(true);
   }
 
   useEffect(() => {
@@ -130,22 +127,6 @@ export function PurchasesPage() {
     <div className="space-y-8">
       <h1 className="text-2xl font-semibold text-gray-900">Achats</h1>
 
-      {loaded && !openCaisseSessionId ? (
-        <div className="max-w-2xl rounded-xl bg-white p-8 text-center shadow-sm">
-          <Lock size={32} className="mx-auto mb-3 text-gray-300" />
-          <h2 className="mb-1 text-lg font-semibold text-gray-900">Ouvrez la caisse pour enregistrer un achat</h2>
-          <p className="mb-4 text-sm text-gray-500">
-            Aucun achat ne peut être enregistré tant que la caisse n'est pas ouverte, quelle que soit la
-            provenance des fonds.
-          </p>
-          <Link
-            to="/pos"
-            className="inline-block rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
-          >
-            Aller ouvrir la caisse
-          </Link>
-        </div>
-      ) : (
       <form onSubmit={handleSubmit(onSubmit)} className="max-w-2xl space-y-4 rounded-xl bg-white p-6 shadow-sm">
         <h2 className="font-medium text-gray-900">Nouvel achat</h2>
 
@@ -179,7 +160,15 @@ export function PurchasesPage() {
               </label>
             ))}
           </div>
-          {paymentSource === "caisse" && (
+          {paymentSource === "caisse" && !openCaisseSessionId && (
+            <p className="flex flex-wrap items-center gap-1.5 text-xs text-amber-600">
+              Aucune caisse ouverte actuellement.
+              <Link to="/pos" className="font-medium underline hover:text-amber-700">
+                Ouvrir la caisse
+              </Link>
+            </p>
+          )}
+          {paymentSource === "caisse" && openCaisseSessionId && (
             <p className="text-xs text-gray-400">Le montant total sera débité de la caisse actuellement ouverte.</p>
           )}
         </div>
@@ -245,13 +234,12 @@ export function PurchasesPage() {
 
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || (paymentSource === "caisse" && !openCaisseSessionId)}
           className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
         >
           Enregistrer l'achat
         </button>
       </form>
-      )}
 
       <div className="rounded-xl bg-white p-6 shadow-sm">
         <h2 className="mb-3 font-medium text-gray-900">Achats récents</h2>
