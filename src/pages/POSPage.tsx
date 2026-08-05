@@ -464,6 +464,17 @@ export function POSPage() {
     );
   }
 
+  // Lets the cashier adjust the price on the spot to close a negotiated sale -
+  // whatever is entered here is the price the sale is actually recorded at.
+  function updateUnitPrice(kind: "product" | "service", id: string, value: string) {
+    const price = Number(value);
+    setCart((prev) =>
+      prev.map((l) =>
+        l.kind === kind && l.id === id ? { ...l, unit_price: Number.isNaN(price) ? 0 : Math.max(0, price) } : l,
+      ),
+    );
+  }
+
   function removeFromCart(kind: "product" | "service", id: string) {
     setCart((prev) => prev.filter((l) => !(l.kind === kind && l.id === id)));
   }
@@ -853,6 +864,17 @@ export function POSPage() {
                           <span className="text-sm font-medium text-red-600">
                             {formatCurrency(l.unit_price * l.quantity)}
                           </span>
+                        </div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <label className="whitespace-nowrap text-xs text-gray-500">Prix négocié</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={l.unit_price}
+                            onChange={(e) => updateUnitPrice(l.kind, l.id, e.target.value)}
+                            className="w-full rounded-md border border-gray-300 bg-white px-2 py-1 text-right text-sm text-gray-900"
+                          />
                         </div>
                       </div>
                     ))}
