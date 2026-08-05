@@ -709,12 +709,16 @@ export function POSPage() {
               <p className="mb-4 text-sm text-gray-500">
                 Aucune vente ne peut être enregistrée tant que la caisse n'est pas ouverte.
               </p>
-              {lastClosingAmount !== null && (
-                <p className="mb-3 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-500">
-                  Montant à la dernière clôture : {formatCurrency(lastClosingAmount)}. Gardez ce montant ou
-                  ajustez-le si vous ajoutez des espèces.
-                </p>
-              )}
+              <div className="mb-4 rounded-lg bg-gray-50 p-4">
+                <p className="text-xs uppercase tracking-wide text-gray-400">Montant actuellement en caisse</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(lastClosingAmount ?? 0)}</p>
+                {lastClosingAmount !== null && (
+                  <p className="mt-1 text-xs text-gray-400">
+                    D'après la dernière clôture. Gardez ce montant ou ajustez-le ci-dessous si vous ajoutez des
+                    espèces.
+                  </p>
+                )}
+              </div>
               <div className="space-y-2">
                 <input
                   type="number"
@@ -727,7 +731,7 @@ export function POSPage() {
                 {sessionError && <p className="text-sm text-red-600">{sessionError}</p>}
                 <button
                   onClick={openSession}
-                  className="w-full rounded-md bg-red-600 py-2 text-sm font-medium text-white hover:bg-red-700"
+                  className="w-full animate-pulse rounded-md bg-red-600 py-2.5 text-sm font-semibold text-white shadow-md shadow-red-600/40 hover:bg-red-700"
                 >
                   Ouvrir la caisse
                 </button>
