@@ -2,11 +2,9 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { RequireAuth } from "./routes/RequireAuth";
 import { RequireOrg } from "./routes/RequireOrg";
-import { RequireNoOrg } from "./routes/RequireNoOrg";
 import { RequireRole } from "./routes/RequireRole";
 import { Layout } from "./components/Layout";
 import { LoginPage } from "./pages/LoginPage";
-import { OnboardingPage } from "./pages/OnboardingPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ProductsPage } from "./pages/ProductsPage";
 import { ServicesPage } from "./pages/ServicesPage";
@@ -32,10 +30,6 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
 
           <Route element={<RequireAuth />}>
-            <Route element={<RequireNoOrg />}>
-              <Route path="/onboarding" element={<OnboardingPage />} />
-            </Route>
-
             <Route element={<RequireOrg />}>
               <Route element={<Layout />}>
                 <Route path="/" element={<DashboardPage />} />

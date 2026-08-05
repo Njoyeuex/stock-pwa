@@ -57,7 +57,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .select(
         "org_id, role, store_id, perm_caisse, perm_catalog, perm_invoices, perm_users, perm_view_users, perm_view_reports",
       )
-      .eq("is_active", true);
+      .eq("is_active", true)
+      // Without an explicit order the "first" membership is whatever Postgres
+      // happens to return, so a user belonging to more than one organization
+      // could land in a different one on every sign-in. Oldest first is stable.
+      .order("created_at", { ascending: true });
     const rows = data ?? [];
     setMemberships(rows);
     setCurrentOrgIdState((prev) => prev ?? rows[0]?.org_id ?? null);
