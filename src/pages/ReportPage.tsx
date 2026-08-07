@@ -44,6 +44,8 @@ export function ReportPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [voidingId, setVoidingId] = useState<string | null>(null);
   const [voidReason, setVoidReason] = useState("");
+  const [currentCaisse, setCurrentCaisse] = useState<number | null>(null);
+  const [supplierDebt, setSupplierDebt] = useState(0);
 
   async function load() {
     if (!currentOrgId) return;
@@ -94,6 +96,36 @@ export function ReportPage() {
       setPayments(paymentsData ?? []);
     } else {
       setPayments([]);
+    }
+
+    // Total supplier debts (RLS already scopes the balances to this org).
+    const { data: supplierBalances } = await supabase.from("supplier_credit_balances").select("balance");
+    setSupplierDebt((supplierBalances ?? []).reduce((sum, b) => sum + b.balance, 0));
+
+    // Current cash in the open caisse = opening float + cash sales + cash in - cash out.
+    const { data: openSession } = await supabase
+      .from("caisse_sessions")
+      .select("id, opening_float")
+      .eq("org_id", currentOrgId)
+      .eq("status", "open")
+      .maybeSingle();
+
+    if (openSession) {
+      const [{ data: cashPayments }, { data: sessionMovements }] = await Promise.all([
+        supabase
+          .from("payments")
+          .select("amount, sales!inner(caisse_session_id, status)")
+          .eq("method", "cash")
+          .eq("sales.caisse_session_id", openSession.id)
+          .eq("sales.status", "completed"),
+        supabase.from("cash_movements").select("type, amount").eq("caisse_session_id", openSession.id),
+      ]);
+      const cashSales = ((cashPayments as unknown as { amount: number }[]) ?? []).reduce((s, p) => s + p.amount, 0);
+      const mvIn = (sessionMovements ?? []).filter((m) => m.type === "in").reduce((s, m) => s + m.amount, 0);
+      const mvOut = (sessionMovements ?? []).filter((m) => m.type === "out").reduce((s, m) => s + m.amount, 0);
+      setCurrentCaisse(openSession.opening_float + cashSales + mvIn - mvOut);
+    } else {
+      setCurrentCaisse(null);
     }
 
     setLoading(false);
@@ -172,6 +204,29 @@ export function ReportPage() {
         <p className="text-sm text-gray-500">Chargement...</p>
       ) : (
         <>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="rounded-xl bg-blue-900 p-6 text-white shadow-sm">
+              <p className="text-sm text-blue-200">Solde de la caisse actuelle</p>
+              <p className="mt-1 text-3xl font-bold">
+                {currentCaisse !== null ? formatCurrency(currentCaisse) : "Caisse fermée"}
+              </p>
+              <p className="mt-1 text-xs text-blue-200">
+                {currentCaisse !== null
+                  ? "Espèces réellement dans la caisse ouverte en ce moment."
+                  : "Aucune caisse n'est ouverte actuellement."}
+              </p>
+            </div>
+            <div className="rounded-xl bg-white p-6 shadow-sm">
+              <p className="text-sm text-gray-500">Dettes envers les fournisseurs</p>
+              <p className={`mt-1 text-3xl font-bold ${supplierDebt > 0 ? "text-amber-600" : "text-gray-900"}`}>
+                {formatCurrency(supplierDebt)}
+              </p>
+              <p className="mt-1 text-xs text-gray-400">
+                Montant total restant dû aux fournisseurs (achats à crédit non réglés).
+              </p>
+            </div>
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-xl bg-white p-6 shadow-sm">
               <p className="text-sm text-gray-500">Total des ventes</p>

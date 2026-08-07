@@ -13,11 +13,13 @@ type Supplier = Tables<"suppliers">;
 type Product = Tables<"products">;
 type Purchase = Tables<"purchases">;
 
-const PAYMENT_SOURCE_LABELS: Record<string, string> = { caisse: "Caisse", other: "Autre" };
+const PAID_SOURCE_LABELS: Record<string, string> = { caisse: "Caisse", other: "Autre" };
 
 const schema = z.object({
   supplier_id: z.string().uuid("Choisir un fournisseur").optional().or(z.literal("")),
-  payment_source: z.enum(["caisse", "other"]),
+  paid_source: z.enum(["caisse", "other"]),
+  credit_amount: z.coerce.number().min(0, "Doit être positif ou nul"),
+  due_date: z.string().optional().or(z.literal("")),
   lines: z
     .array(
       z.object({
@@ -49,10 +51,23 @@ export function PurchasesPage() {
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { payment_source: "other", lines: [{ product_id: "", quantity: 1, unit_cost: 0 }] },
+    defaultValues: {
+      paid_source: "other",
+      credit_amount: 0,
+      due_date: "",
+      lines: [{ product_id: "", quantity: 1, unit_cost: 0 }],
+    },
   });
 
-  const paymentSource = watch("payment_source");
+  const paidSource = watch("paid_source");
+  const watchedLines = watch("lines");
+  const total = (watchedLines ?? []).reduce(
+    (sum, l) => sum + (Number(l?.quantity) || 0) * (Number(l?.unit_cost) || 0),
+    0,
+  );
+  const creditAmount = Math.min(Math.max(Number(watch("credit_amount")) || 0, 0), total);
+  const paidAmount = total - creditAmount;
+
   const { fields, append, remove } = useFieldArray({ control, name: "lines" });
 
   async function loadAll() {
@@ -89,10 +104,23 @@ export function PurchasesPage() {
 
   async function onSubmit(values: FormValues) {
     if (!currentOrgId || !currentStoreId) return;
-    if (values.payment_source === "caisse" && !openCaisseSessionId) {
-      setErrorMessage("Aucune caisse ouverte. Ouvrez la caisse ou choisissez une autre provenance.");
+
+    const credit = Math.min(Math.max(values.credit_amount || 0, 0), total);
+    const paid = total - credit;
+
+    if (credit > 0 && !values.supplier_id) {
+      setErrorMessage("Choisissez un fournisseur pour la partie à crédit.");
       return;
     }
+    if (credit > 0 && !values.due_date) {
+      setErrorMessage("Indiquez la date d'échéance de la partie à crédit.");
+      return;
+    }
+    if (values.paid_source === "caisse" && paid > 0 && !openCaisseSessionId) {
+      setErrorMessage("Aucune caisse ouverte. Ouvrez la caisse ou payez la partie immédiate autrement.");
+      return;
+    }
+
     setErrorMessage(null);
     setSuccessMessage(null);
 
@@ -101,8 +129,11 @@ export function PurchasesPage() {
       p_store_id: currentStoreId,
       p_supplier_id: (values.supplier_id || null) as string,
       p_lines: values.lines,
-      p_payment_source: values.payment_source,
-      p_caisse_session_id: values.payment_source === "caisse" ? openCaisseSessionId ?? undefined : undefined,
+      p_paid_source: values.paid_source,
+      p_caisse_session_id:
+        values.paid_source === "caisse" && paid > 0 ? openCaisseSessionId ?? undefined : undefined,
+      p_credit_amount: credit,
+      p_due_date: credit > 0 ? values.due_date : undefined,
     });
 
     if (error) {
@@ -110,18 +141,22 @@ export function PurchasesPage() {
       return;
     }
 
-    setSuccessMessage(
-      values.payment_source === "caisse"
-        ? "Achat enregistré, stock mis à jour et montant débité de la caisse."
-        : "Achat enregistré, stock mis à jour.",
-    );
+    const parts: string[] = ["Achat enregistré, stock mis à jour"];
+    if (paid > 0 && values.paid_source === "caisse") parts.push(`${formatCurrency(paid)} débité de la caisse`);
+    if (credit > 0) parts.push(`${formatCurrency(credit)} à crédit`);
+    setSuccessMessage(parts.join(" — ") + ".");
+
     reset({
       supplier_id: values.supplier_id,
-      payment_source: values.payment_source,
+      paid_source: values.paid_source,
+      credit_amount: 0,
+      due_date: "",
       lines: [{ product_id: "", quantity: 1, unit_cost: 0 }],
     });
     await loadAll();
   }
+
+  const caisseBlocking = paidSource === "caisse" && paidAmount > 0 && !openCaisseSessionId;
 
   return (
     <div className="space-y-8">
@@ -132,10 +167,7 @@ export function PurchasesPage() {
 
         <div className="space-y-1">
           <label className="text-sm text-gray-600">Fournisseur</label>
-          <select
-            className="w-full rounded-md border border-gray-300 px-3 py-2"
-            {...register("supplier_id")}
-          >
+          <select className="w-full rounded-md border border-gray-300 px-3 py-2" {...register("supplier_id")}>
             <option value="">Aucun</option>
             {suppliers.map((s) => (
               <option key={s.id} value={s.id}>
@@ -143,34 +175,6 @@ export function PurchasesPage() {
               </option>
             ))}
           </select>
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-sm text-gray-600">Provenance des fonds</label>
-          <div className="grid grid-cols-2 gap-1.5">
-            {(["other", "caisse"] as const).map((value) => (
-              <label
-                key={value}
-                className={`flex cursor-pointer items-center justify-center rounded-md py-2 text-sm font-medium ${
-                  paymentSource === value ? "bg-blue-900 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                }`}
-              >
-                <input type="radio" value={value} className="sr-only" {...register("payment_source")} />
-                {PAYMENT_SOURCE_LABELS[value]}
-              </label>
-            ))}
-          </div>
-          {paymentSource === "caisse" && !openCaisseSessionId && (
-            <p className="flex flex-wrap items-center gap-1.5 text-xs text-amber-600">
-              Aucune caisse ouverte actuellement.
-              <Link to="/pos" className="font-medium underline hover:text-amber-700">
-                Ouvrir la caisse
-              </Link>
-            </p>
-          )}
-          {paymentSource === "caisse" && openCaisseSessionId && (
-            <p className="text-xs text-gray-400">Le montant total sera débité de la caisse actuellement ouverte.</p>
-          )}
         </div>
 
         <div className="space-y-2">
@@ -229,12 +233,84 @@ export function PurchasesPage() {
           </button>
         </div>
 
+        <div className="rounded-lg border border-gray-200 p-4">
+          <div className="mb-3 flex items-center justify-between text-sm">
+            <span className="text-gray-600">Total de l'achat</span>
+            <span className="font-semibold text-gray-900">{formatCurrency(total)}</span>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <label className="text-sm text-gray-600">Montant à crédit (dette fournisseur)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0"
+                className="w-full rounded-md border border-gray-300 px-3 py-2"
+                {...register("credit_amount")}
+              />
+              <p className="text-xs text-gray-400">Laissez 0 si l'achat est entièrement payé maintenant.</p>
+            </div>
+            {creditAmount > 0 && (
+              <div className="space-y-1">
+                <label className="text-sm text-gray-600">Date d'échéance</label>
+                <input
+                  type="date"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2"
+                  {...register("due_date")}
+                />
+              </div>
+            )}
+          </div>
+
+          {paidAmount > 0 && (
+            <div className="mt-3 space-y-1">
+              <label className="text-sm text-gray-600">
+                Provenance des {formatCurrency(paidAmount)} payés maintenant
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {(["other", "caisse"] as const).map((value) => (
+                  <label
+                    key={value}
+                    className={`flex cursor-pointer items-center justify-center rounded-md py-2 text-sm font-medium ${
+                      paidSource === value ? "bg-blue-900 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    <input type="radio" value={value} className="sr-only" {...register("paid_source")} />
+                    {PAID_SOURCE_LABELS[value]}
+                  </label>
+                ))}
+              </div>
+              {caisseBlocking && (
+                <p className="flex flex-wrap items-center gap-1.5 text-xs text-amber-600">
+                  Aucune caisse ouverte actuellement.
+                  <Link to="/pos" className="font-medium underline hover:text-amber-700">
+                    Ouvrir la caisse
+                  </Link>
+                </p>
+              )}
+              {paidSource === "caisse" && openCaisseSessionId && (
+                <p className="text-xs text-gray-400">
+                  {formatCurrency(paidAmount)} seront débités de la caisse actuellement ouverte.
+                </p>
+              )}
+            </div>
+          )}
+
+          {creditAmount > 0 && (
+            <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              {formatCurrency(creditAmount)} resteront dus à ce fournisseur, à régler avant l'échéance indiquée.
+            </p>
+          )}
+        </div>
+
         {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
         {successMessage && <p className="text-sm text-emerald-600">{successMessage}</p>}
 
         <button
           type="submit"
-          disabled={isSubmitting || (paymentSource === "caisse" && !openCaisseSessionId)}
+          disabled={isSubmitting || caisseBlocking || total <= 0}
           className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
         >
           Enregistrer l'achat
@@ -251,18 +327,29 @@ export function PurchasesPage() {
               <thead className="text-left text-gray-500">
                 <tr>
                   <th className="pb-2">Date</th>
-                  <th className="pb-2">Statut</th>
-                  <th className="pb-2">Provenance</th>
                   <th className="pb-2">Total</th>
+                  <th className="pb-2">Payé</th>
+                  <th className="pb-2">Crédit</th>
+                  <th className="pb-2">Échéance</th>
                 </tr>
               </thead>
               <tbody>
                 {purchases.map((p) => (
                   <tr key={p.id} className="border-t border-gray-100">
                     <td className="py-2 text-gray-900">{new Date(p.created_at).toLocaleString("fr-FR")}</td>
-                    <td className="py-2 capitalize text-gray-700">{p.status}</td>
-                    <td className="py-2 text-gray-700">{PAYMENT_SOURCE_LABELS[p.payment_source] ?? p.payment_source}</td>
                     <td className="py-2 text-gray-900">{formatCurrency(p.total_amount)}</td>
+                    <td className="py-2 text-gray-700">
+                      {formatCurrency(p.paid_amount)}
+                      {p.paid_amount > 0 && (
+                        <span className="text-xs text-gray-400"> ({PAID_SOURCE_LABELS[p.payment_source] ?? p.payment_source})</span>
+                      )}
+                    </td>
+                    <td className={`py-2 ${p.credit_amount > 0 ? "font-medium text-amber-600" : "text-gray-400"}`}>
+                      {p.credit_amount > 0 ? formatCurrency(p.credit_amount) : "—"}
+                    </td>
+                    <td className="py-2 text-gray-700">
+                      {p.due_date ? new Date(p.due_date).toLocaleDateString("fr-FR") : "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>

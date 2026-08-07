@@ -640,8 +640,11 @@ export type Database = {
           caisse_session_id: string | null
           created_at: string
           created_by: string
+          credit_amount: number
+          due_date: string | null
           id: string
           org_id: string
+          paid_amount: number
           payment_source: string
           status: string
           store_id: string
@@ -652,8 +655,11 @@ export type Database = {
           caisse_session_id?: string | null
           created_at?: string
           created_by: string
+          credit_amount?: number
+          due_date?: string | null
           id?: string
           org_id: string
+          paid_amount?: number
           payment_source?: string
           status?: string
           store_id: string
@@ -664,8 +670,11 @@ export type Database = {
           caisse_session_id?: string | null
           created_at?: string
           created_by?: string
+          credit_amount?: number
+          due_date?: string | null
           id?: string
           org_id?: string
+          paid_amount?: number
           payment_source?: string
           status?: string
           store_id?: string
@@ -972,6 +981,86 @@ export type Database = {
           },
         ]
       }
+      supplier_credit_balances: {
+        Row: {
+          balance: number
+          supplier_id: string
+        }
+        Insert: {
+          balance?: number
+          supplier_id: string
+        }
+        Update: {
+          balance?: number
+          supplier_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_credit_balances_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: true
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_credit_movements: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          due_date: string | null
+          id: string
+          note: string | null
+          org_id: string
+          reference_id: string | null
+          reference_table: string | null
+          supplier_id: string
+          type: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by: string
+          due_date?: string | null
+          id?: string
+          note?: string | null
+          org_id: string
+          reference_id?: string | null
+          reference_table?: string | null
+          supplier_id: string
+          type: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          due_date?: string | null
+          id?: string
+          note?: string | null
+          org_id?: string
+          reference_id?: string | null
+          reference_table?: string | null
+          supplier_id?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_credit_movements_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_credit_movements_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       suppliers: {
         Row: {
           address: string | null
@@ -1102,9 +1191,11 @@ export type Database = {
       receive_purchase: {
         Args: {
           p_caisse_session_id?: string
+          p_credit_amount?: number
+          p_due_date?: string
           p_lines: Json
           p_org_id: string
-          p_payment_source?: string
+          p_paid_source?: string
           p_store_id: string
           p_supplier_id: string
         }
@@ -1121,6 +1212,16 @@ export type Database = {
       }
       record_customer_repayment: {
         Args: { p_amount: number; p_customer_id: string; p_note?: string }
+        Returns: string
+      }
+      record_supplier_repayment: {
+        Args: {
+          p_amount: number
+          p_caisse_session_id?: string
+          p_from_caisse?: boolean
+          p_note?: string
+          p_supplier_id: string
+        }
         Returns: string
       }
       restore_backup: { Args: { p_payload: Json }; Returns: undefined }
