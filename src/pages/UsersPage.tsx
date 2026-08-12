@@ -7,6 +7,7 @@ import { supabase } from "../lib/supabaseClient";
 import { mapSupabaseError } from "../lib/errorMessages";
 import { adminCreateUser, adminDeleteUser, AuthApiError } from "../lib/authApi";
 import { ROLE_LABELS } from "../lib/roles";
+import { ErrorBox } from "../components/ErrorBox";
 import { useAuth, type AppRole, type MembershipPermissions } from "../context/AuthContext";
 
 interface MemberRow extends MembershipPermissions {
@@ -284,7 +285,7 @@ export function UsersPage() {
             </div>
           )}
 
-          {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
+          {errorMessage && <ErrorBox message={errorMessage} onDismiss={() => setErrorMessage(null)} />}
           {successMessage && <p className="text-sm text-emerald-600">{successMessage}</p>}
 
           <button

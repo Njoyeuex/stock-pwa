@@ -20,6 +20,9 @@ import { mapSupabaseError } from "../lib/errorMessages";
 import { stockStatus } from "../lib/stockStatus";
 import { formatCurrency } from "../lib/currency";
 import { ROLE_LABELS } from "../lib/roles";
+import { unitLabel, unitShort } from "../lib/units";
+import { productPhotoUrl } from "../lib/productImages";
+import { ErrorBox } from "../components/ErrorBox";
 import { useAuth } from "../context/AuthContext";
 import { ReceiptTicket, type ReceiptData } from "../components/ReceiptTicket";
 import { offlineDb } from "../lib/offlineDb";
@@ -40,6 +43,8 @@ interface CatalogProduct {
   name: string;
   sale_price: number;
   reorder_threshold: number;
+  unit: string;
+  image_path: string | null;
   quantity: number;
 }
 
@@ -57,13 +62,20 @@ interface SellableItem {
   price: number;
   quantity: number | null;
   reorderThreshold: number | null;
+  unit: string | null;
+  imagePath: string | null;
 }
+
+// Units sold by a variable amount (not just whole pieces) get a quantity prompt
+// instead of the default "click adds one" behavior.
+const QUANTITY_PROMPT_UNITS = new Set(["litre"]);
 
 interface CartLine {
   kind: "product" | "service";
   id: string;
   name: string;
   sku: string | null;
+  unit: string | null;
   unit_price: number;
   quantity: number;
 }
@@ -114,6 +126,9 @@ export function POSPage() {
   const [closeResult, setCloseResult] = useState<{ expected: number; variance: number } | null>(null);
   const [orgName, setOrgName] = useState("");
   const [lastReceipt, setLastReceipt] = useState<ReceiptData | null>(null);
+  const [caisseBalance, setCaisseBalance] = useState<number | null>(null);
+  const [quantityPromptItem, setQuantityPromptItem] = useState<SellableItem | null>(null);
+  const [quantityPromptValue, setQuantityPromptValue] = useState("1");
 
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pendingCount, setPendingCount] = useState(0);
@@ -232,6 +247,45 @@ export function POSPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStoreId]);
 
+  // Live cash-on-hand for the open session = opening float + cash sales + cash in - cash out.
+  async function loadCaisseBalance(sessionId: string | undefined | null) {
+    if (!sessionId || !navigator.onLine) {
+      setCaisseBalance(null);
+      return;
+    }
+    const { data: session } = await supabase
+      .from("caisse_sessions")
+      .select("opening_float")
+      .eq("id", sessionId)
+      .maybeSingle();
+    if (!session) {
+      setCaisseBalance(null);
+      return;
+    }
+    const [{ data: cashPayments }, { data: sessionMovements }] = await Promise.all([
+      supabase
+        .from("payments")
+        .select("amount, sales!inner(caisse_session_id, status)")
+        .eq("method", "cash")
+        .eq("sales.caisse_session_id", sessionId)
+        .eq("sales.status", "completed"),
+      supabase.from("cash_movements").select("type, amount").eq("caisse_session_id", sessionId),
+    ]);
+    const cashSales = ((cashPayments as unknown as { amount: number }[]) ?? []).reduce((s, p) => s + p.amount, 0);
+    const mvIn = (sessionMovements ?? []).filter((m) => m.type === "in").reduce((s, m) => s + m.amount, 0);
+    const mvOut = (sessionMovements ?? []).filter((m) => m.type === "out").reduce((s, m) => s + m.amount, 0);
+    setCaisseBalance(session.opening_float + cashSales + mvIn - mvOut);
+  }
+
+  useEffect(() => {
+    if (caisseSession) {
+      loadCaisseBalance(caisseSession.id);
+    } else {
+      setCaisseBalance(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caisseSession?.id]);
+
   async function openSession() {
     if (!currentOrgId || !currentStoreId) return;
     const float = Number(openingFloat);
@@ -274,6 +328,7 @@ export function POSPage() {
     setCashMovementAmount("");
     setCashMovementReason("");
     setShowCashMovement(false);
+    await loadCaisseBalance(caisseSession.id);
   }
 
   async function submitCloseSession() {
@@ -300,6 +355,7 @@ export function POSPage() {
     setCloseResult({ expected: closed?.expected_cash ?? 0, variance: closed?.variance ?? 0 });
     setClosingCash("");
     setShowCloseForm(false);
+    setCaisseBalance(null);
     await loadSession();
   }
 
@@ -384,7 +440,7 @@ export function POSPage() {
     const [{ data: productsData }, { data: stockData }] = await Promise.all([
       supabase
         .from("products")
-        .select("id, sku, name, sale_price, reorder_threshold")
+        .select("id, sku, name, sale_price, reorder_threshold, unit, image_path")
         .eq("org_id", currentOrgId)
         .eq("is_active", true)
         .order("name"),
@@ -417,6 +473,8 @@ export function POSPage() {
         price: p.sale_price,
         quantity: p.quantity,
         reorderThreshold: p.reorder_threshold,
+        unit: p.unit,
+        imagePath: p.image_path,
       })),
       ...services.map((s) => ({
         kind: "service" as const,
@@ -426,6 +484,8 @@ export function POSPage() {
         price: s.price,
         quantity: null,
         reorderThreshold: null,
+        unit: null,
+        imagePath: null,
       })),
     ],
     [products, services],
@@ -441,7 +501,31 @@ export function POSPage() {
 
   const total = useMemo(() => cart.reduce((sum, l) => sum + l.unit_price * l.quantity, 0), [cart]);
 
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+
+  function cartQuantityFor(kind: "product" | "service", id: string) {
+    return cart.find((l) => l.kind === kind && l.id === id)?.quantity ?? 0;
+  }
+
   function addToCart(item: SellableItem) {
+    setCatalogError(null);
+
+    if (item.kind === "product" && item.unit && QUANTITY_PROMPT_UNITS.has(item.unit)) {
+      setQuantityPromptItem(item);
+      setQuantityPromptValue("1");
+      return;
+    }
+
+    if (item.kind === "product") {
+      const nextQty = cartQuantityFor(item.kind, item.id) + 1;
+      if (nextQty > (item.quantity ?? 0)) {
+        setCatalogError(
+          `Quantité insuffisante en stock pour "${item.name}" : disponible ${item.quantity ?? 0}, demandé ${nextQty}.`,
+        );
+        return;
+      }
+    }
+
     setCart((prev) => {
       const existing = prev.find((l) => l.kind === item.kind && l.id === item.id);
       if (existing) {
@@ -451,12 +535,70 @@ export function POSPage() {
       }
       return [
         ...prev,
-        { kind: item.kind, id: item.id, name: item.name, sku: item.sku, unit_price: item.price, quantity: 1 },
+        {
+          kind: item.kind,
+          id: item.id,
+          name: item.name,
+          sku: item.sku,
+          unit: item.unit,
+          unit_price: item.price,
+          quantity: 1,
+        },
       ];
     });
   }
 
+  function confirmQuantityPrompt() {
+    if (!quantityPromptItem) return;
+    const qty = Number(quantityPromptValue);
+    if (Number.isNaN(qty) || qty <= 0) {
+      setCatalogError("Quantité invalide.");
+      return;
+    }
+    const nextQty = cartQuantityFor(quantityPromptItem.kind, quantityPromptItem.id) + qty;
+    if (nextQty > (quantityPromptItem.quantity ?? 0)) {
+      setCatalogError(
+        `Quantité insuffisante en stock pour "${quantityPromptItem.name}" : disponible ${quantityPromptItem.quantity ?? 0}, demandé ${nextQty}.`,
+      );
+      return;
+    }
+    setCatalogError(null);
+    setCart((prev) => {
+      const existing = prev.find((l) => l.kind === quantityPromptItem.kind && l.id === quantityPromptItem.id);
+      if (existing) {
+        return prev.map((l) =>
+          l.kind === quantityPromptItem.kind && l.id === quantityPromptItem.id
+            ? { ...l, quantity: l.quantity + qty }
+            : l,
+        );
+      }
+      return [
+        ...prev,
+        {
+          kind: quantityPromptItem.kind,
+          id: quantityPromptItem.id,
+          name: quantityPromptItem.name,
+          sku: quantityPromptItem.sku,
+          unit: quantityPromptItem.unit,
+          unit_price: quantityPromptItem.price,
+          quantity: qty,
+        },
+      ];
+    });
+    setQuantityPromptItem(null);
+    setQuantityPromptValue("1");
+  }
+
   function updateQuantity(kind: "product" | "service", id: string, delta: number) {
+    if (delta > 0 && kind === "product") {
+      const product = products.find((p) => p.id === id);
+      const nextQty = cartQuantityFor(kind, id) + delta;
+      if (product && nextQty > product.quantity) {
+        setCatalogError(`Quantité insuffisante en stock pour "${product.name}" : disponible ${product.quantity}.`);
+        return;
+      }
+    }
+    setCatalogError(null);
     setCart((prev) =>
       prev
         .map((l) => (l.kind === kind && l.id === id ? { ...l, quantity: l.quantity + delta } : l))
@@ -488,6 +630,16 @@ export function POSPage() {
     if (paymentMethod === "cash" && !caisseSession) {
       setErrorMessage("Ouvrez la caisse avant d'encaisser une vente en espèces.");
       return;
+    }
+    for (const line of cart) {
+      if (line.kind !== "product") continue;
+      const product = products.find((p) => p.id === line.id);
+      if (product && line.quantity > product.quantity) {
+        setErrorMessage(
+          `Quantité insuffisante en stock pour "${line.name}" : disponible ${product.quantity}, demandé ${line.quantity}.`,
+        );
+        return;
+      }
     }
     setErrorMessage(null);
     setSubmitting(true);
@@ -546,6 +698,9 @@ export function POSPage() {
         created_at: new Date().toISOString(),
       });
       await refreshPendingCount();
+      if (paymentMethod === "cash") {
+        setCaisseBalance((prev) => (prev !== null ? prev + total : prev));
+      }
 
       setLastReceipt({
         orgName,
@@ -566,6 +721,10 @@ export function POSPage() {
         .select("sale_number, created_at, total_amount, customer_name")
         .eq("id", saleId)
         .maybeSingle();
+
+      if (paymentMethod === "cash" && caisseSession) {
+        await loadCaisseBalance(caisseSession.id);
+      }
 
       setLastReceipt({
         orgName,
@@ -607,7 +766,22 @@ export function POSPage() {
             {storeName ? `${storeName}${storeCity ? ` • ${storeCity}` : ""}` : "Chargement du magasin..."}
           </p>
         </div>
-        <div className="flex items-center justify-between gap-4 sm:justify-end">
+        <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
+          <div
+            className={`flex items-center gap-2 rounded-lg bg-[length:200%_200%] px-3 py-2 shadow-md ${
+              caisseBalance !== null
+                ? "animate-caisse-glow bg-gradient-to-r from-blue-600 via-sky-400 to-blue-600"
+                : "bg-white/10"
+            }`}
+          >
+            <Wallet size={16} className="text-white" />
+            <div className="leading-tight">
+              <p className="text-[10px] uppercase tracking-wide text-blue-100">Argent en caisse</p>
+              <p className="text-sm font-bold text-white">
+                {caisseBalance !== null ? formatCurrency(caisseBalance) : "Caisse fermée"}
+              </p>
+            </div>
+          </div>
           <div className="text-sm sm:text-right">
             <p className="font-medium">
               {roleLabel}
@@ -694,7 +868,11 @@ export function POSPage() {
         </div>
       )}
 
-      {sessionError && <p className="bg-red-50 px-4 py-2 text-sm text-red-600 sm:px-8">{sessionError}</p>}
+      {sessionError && (
+        <div className="px-4 pt-2 sm:px-8">
+          <ErrorBox message={sessionError} onDismiss={() => setSessionError(null)} />
+        </div>
+      )}
 
       {closeResult && (
         <div className="flex items-center justify-between bg-white px-4 py-3 text-sm sm:px-8">
@@ -739,7 +917,7 @@ export function POSPage() {
                   placeholder="Fonds initial"
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-center text-sm"
                 />
-                {sessionError && <p className="text-sm text-red-600">{sessionError}</p>}
+                {sessionError && <ErrorBox message={sessionError} onDismiss={() => setSessionError(null)} />}
                 <button
                   onClick={openSession}
                   className="w-full animate-pulse rounded-md bg-red-600 py-2.5 text-sm font-semibold text-white shadow-md shadow-red-600/40 hover:bg-red-700"
@@ -766,6 +944,8 @@ export function POSPage() {
                 </kbd>
               </div>
 
+              {catalogError && <ErrorBox message={catalogError} onDismiss={() => setCatalogError(null)} />}
+
               {loading ? (
                 <p className="text-sm text-gray-500">Chargement...</p>
               ) : filteredItems.length === 0 ? (
@@ -775,37 +955,58 @@ export function POSPage() {
                   {filteredItems.map((item) => {
                     const low =
                       item.kind === "product" && stockStatus(item.quantity ?? 0, item.reorderThreshold ?? 0) !== "ok";
+                    const photoUrl = item.kind === "product" ? productPhotoUrl(item.imagePath) : null;
                     return (
                       <button
                         key={`${item.kind}-${item.id}`}
                         onClick={() => addToCart(item)}
-                        className={`relative rounded-xl border p-4 text-left transition-colors ${
-                          low
-                            ? "border-amber-400 bg-amber-50 hover:bg-amber-100"
-                            : "border-gray-200 bg-white hover:bg-gray-50"
+                        style={
+                          photoUrl
+                            ? { backgroundImage: `url(${photoUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
+                            : undefined
+                        }
+                        className={`relative overflow-hidden rounded-xl border p-4 text-left transition-colors ${
+                          photoUrl
+                            ? "border-gray-300"
+                            : low
+                              ? "border-amber-400 bg-amber-50 hover:bg-amber-100"
+                              : "border-gray-200 bg-white hover:bg-gray-50"
                         }`}
                       >
-                        {low && <AlertTriangle size={16} className="absolute right-3 top-3 text-amber-500" />}
-                        {item.kind === "service" ? (
-                          <Wrench size={22} className="mb-3 text-blue-800" />
-                        ) : (
-                          <Package size={22} className="mb-3 text-blue-800" />
-                        )}
-                        <p className="text-sm font-semibold text-gray-900">{item.name}</p>
-                        <p className="mb-2 text-xs text-gray-500">
-                          {item.sku ?? (item.kind === "service" ? "Service" : "—")}
-                        </p>
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold text-red-600">{formatCurrency(item.price)}</span>
-                          {item.kind === "product" && (
-                            <span
-                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                                low ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
-                              }`}
-                            >
-                              Stock: {item.quantity}
-                            </span>
+                        {photoUrl && <div className="absolute inset-0 bg-black/55" />}
+                        <div className="relative">
+                          {low && (
+                            <AlertTriangle
+                              size={16}
+                              className={`absolute right-0 top-0 ${photoUrl ? "text-amber-400" : "text-amber-500"}`}
+                            />
                           )}
+                          {!photoUrl &&
+                            (item.kind === "service" ? (
+                              <Wrench size={22} className="mb-3 text-blue-800" />
+                            ) : (
+                              <Package size={22} className="mb-3 text-blue-800" />
+                            ))}
+                          <p className={`text-sm font-semibold ${photoUrl ? "text-white drop-shadow" : "text-gray-900"}`}>
+                            {item.name}
+                          </p>
+                          <p className={`mb-2 text-xs ${photoUrl ? "text-gray-200" : "text-gray-500"}`}>
+                            {item.sku ?? (item.kind === "service" ? "Service" : "—")}
+                          </p>
+                          <div className="flex items-center justify-between">
+                            <span className={`font-semibold ${photoUrl ? "text-white drop-shadow" : "text-red-600"}`}>
+                              {formatCurrency(item.price)}
+                            </span>
+                            {item.kind === "product" && (
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                  low ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
+                                }`}
+                              >
+                                Stock: {item.quantity} {unitShort(item.unit)}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </button>
                     );
@@ -853,7 +1054,10 @@ export function POSPage() {
                             >
                               <Minus size={14} />
                             </button>
-                            <span className="w-6 text-center text-sm text-gray-900">{l.quantity}</span>
+                            <span className="min-w-6 text-center text-sm text-gray-900">
+                              {l.quantity}
+                              {l.unit && <span className="ml-0.5 text-xs text-gray-400">{unitShort(l.unit)}</span>}
+                            </span>
                             <button
                               onClick={() => updateQuantity(l.kind, l.id, 1)}
                               className="rounded bg-gray-200 p-1 text-gray-700 hover:bg-gray-300"
@@ -945,7 +1149,7 @@ export function POSPage() {
                           ))}
                       </div>
                     )}
-                    {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
+                    {errorMessage && <ErrorBox message={errorMessage} onDismiss={() => setErrorMessage(null)} />}
                     <div className="flex items-center justify-between text-lg font-semibold text-gray-900">
                       <span>Total</span>
                       <span className="text-red-600">{formatCurrency(total)}</span>
@@ -970,6 +1174,45 @@ export function POSPage() {
           </>
         )}
       </div>
+
+      {quantityPromptItem && (
+        <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm space-y-3 rounded-xl bg-white p-6">
+            <div className="flex items-center justify-between">
+              <h2 className="font-medium text-gray-900">Quantité à vendre</h2>
+              <button
+                onClick={() => setQuantityPromptItem(null)}
+                className="text-gray-400 hover:text-gray-900"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p className="text-sm text-gray-500">
+              {quantityPromptItem.name} — unité : {unitLabel(quantityPromptItem.unit)}
+            </p>
+            <input
+              type="number"
+              step="0.001"
+              min="0"
+              autoFocus
+              value={quantityPromptValue}
+              onChange={(e) => setQuantityPromptValue(e.target.value)}
+              placeholder={`Quantité en ${unitLabel(quantityPromptItem.unit)}`}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-center text-lg"
+            />
+            <p className="text-xs text-gray-400">
+              Disponible en stock : {quantityPromptItem.quantity ?? 0} {unitShort(quantityPromptItem.unit)}
+            </p>
+            {catalogError && <ErrorBox message={catalogError} onDismiss={() => setCatalogError(null)} />}
+            <button
+              onClick={confirmQuantityPrompt}
+              className="w-full rounded-md bg-red-600 py-2 text-sm font-medium text-white hover:bg-red-700"
+            >
+              Ajouter au panier
+            </button>
+          </div>
+        </div>
+      )}
 
       {showCashMovement && (
         <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/40 p-4">
@@ -1012,7 +1255,7 @@ export function POSPage() {
               placeholder="Motif (optionnel)"
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
             />
-            {sessionError && <p className="text-sm text-red-600">{sessionError}</p>}
+            {sessionError && <ErrorBox message={sessionError} onDismiss={() => setSessionError(null)} />}
             <button
               onClick={submitCashMovement}
               className="w-full rounded-md bg-red-600 py-2 text-sm font-medium text-white hover:bg-red-700"
@@ -1069,7 +1312,7 @@ export function POSPage() {
               placeholder="Espèces comptées"
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
             />
-            {sessionError && <p className="text-sm text-red-600">{sessionError}</p>}
+            {sessionError && <ErrorBox message={sessionError} onDismiss={() => setSessionError(null)} />}
             <button
               onClick={submitCloseSession}
               className="w-full rounded-md bg-red-600 py-2 text-sm font-medium text-white hover:bg-red-700"

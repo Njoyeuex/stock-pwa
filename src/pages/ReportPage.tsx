@@ -4,6 +4,8 @@ import { ArrowLeft, AlertTriangle, FileClock } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { mapSupabaseError } from "../lib/errorMessages";
 import { formatCurrency } from "../lib/currency";
+import { unitShort } from "../lib/units";
+import { ErrorBox } from "../components/ErrorBox";
 import { useAuth } from "../context/AuthContext";
 import type { Tables } from "../types/database.types";
 
@@ -20,6 +22,12 @@ interface ServiceLineRow {
   quantity: number;
   line_total: number;
   services: { name: string } | null;
+}
+
+interface SaleLineDetail {
+  name: string;
+  quantity: number;
+  unit: string | null;
 }
 
 function toDateInputValue(d: Date) {
@@ -46,6 +54,7 @@ export function ReportPage() {
   const [voidReason, setVoidReason] = useState("");
   const [currentCaisse, setCurrentCaisse] = useState<number | null>(null);
   const [supplierDebt, setSupplierDebt] = useState(0);
+  const [saleLineDetails, setSaleLineDetails] = useState<Record<string, SaleLineDetail[]>>({});
 
   async function load() {
     if (!currentOrgId) return;
@@ -86,16 +95,32 @@ export function ReportPage() {
     setServiceLines((serviceLinesData as unknown as ServiceLineRow[]) ?? []);
 
     if (salesData && salesData.length > 0) {
-      const { data: paymentsData } = await supabase
-        .from("payments")
-        .select("*")
-        .in(
-          "sale_id",
-          salesData.map((s) => s.id),
-        );
+      const saleIds = salesData.map((s) => s.id);
+      const [{ data: paymentsData }, { data: lineRows }] = await Promise.all([
+        supabase.from("payments").select("*").in("sale_id", saleIds),
+        supabase
+          .from("sale_lines")
+          .select("sale_id, quantity, products(name, unit), services(name)")
+          .in("sale_id", saleIds),
+      ]);
       setPayments(paymentsData ?? []);
+
+      const detailMap: Record<string, SaleLineDetail[]> = {};
+      for (const row of (lineRows as unknown as {
+        sale_id: string;
+        quantity: number;
+        products: { name: string; unit: string } | null;
+        services: { name: string } | null;
+      }[]) ?? []) {
+        const name = row.products?.name ?? row.services?.name ?? "—";
+        const unit = row.products?.unit ?? null;
+        if (!detailMap[row.sale_id]) detailMap[row.sale_id] = [];
+        detailMap[row.sale_id].push({ name, quantity: row.quantity, unit });
+      }
+      setSaleLineDetails(detailMap);
     } else {
       setPayments([]);
+      setSaleLineDetails({});
     }
 
     // Total supplier debts (RLS already scopes the balances to this org).
@@ -198,7 +223,7 @@ export function ReportPage() {
         </div>
       </div>
 
-      {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
+      {errorMessage && <ErrorBox message={errorMessage} onDismiss={() => setErrorMessage(null)} />}
 
       {loading ? (
         <p className="text-sm text-gray-500">Chargement...</p>
@@ -270,6 +295,7 @@ export function ReportPage() {
                     <th className="pb-2">N°</th>
                     <th className="pb-2">Date</th>
                     <th className="pb-2">Client</th>
+                    <th className="pb-2">Articles vendus</th>
                     <th className="pb-2">Statut</th>
                     <th className="pb-2">Total</th>
                     {canVoid && <th className="pb-2"></th>}
@@ -288,6 +314,19 @@ export function ReportPage() {
                         })}
                       </td>
                       <td className="py-2 text-gray-500">{s.customer_name ?? "—"}</td>
+                      <td className="py-2 text-gray-700">
+                        {(saleLineDetails[s.id] ?? []).length === 0 ? (
+                          "—"
+                        ) : (
+                          <ul className="space-y-0.5">
+                            {(saleLineDetails[s.id] ?? []).map((l, i) => (
+                              <li key={i} className="whitespace-nowrap text-xs">
+                                {l.name} <span className="text-gray-400">× {l.quantity} {unitShort(l.unit)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </td>
                       <td className="py-2">
                         {s.status === "completed" ? (
                           <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">

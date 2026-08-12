@@ -1,17 +1,26 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "../lib/supabaseClient";
 import { mapSupabaseError } from "../lib/errorMessages";
 import { formatCurrency } from "../lib/currency";
+import { unitLabel, unitShort } from "../lib/units";
+import { ErrorBox } from "../components/ErrorBox";
 import { useAuth } from "../context/AuthContext";
 import type { Tables } from "../types/database.types";
 
 type Supplier = Tables<"suppliers">;
 type Product = Tables<"products">;
 type Purchase = Tables<"purchases">;
+
+interface PurchaseLineDetail {
+  name: string;
+  sku: string | null;
+  unit: string;
+  quantity: number;
+  unitCost: number;
+}
 
 const PAID_SOURCE_LABELS: Record<string, string> = { caisse: "Caisse", other: "Autre" };
 
@@ -38,6 +47,7 @@ export function PurchasesPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [purchaseLineDetails, setPurchaseLineDetails] = useState<Record<string, PurchaseLineDetail[]>>({});
   const [openCaisseSessionId, setOpenCaisseSessionId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -95,6 +105,37 @@ export function PurchasesPage() {
     setProducts(productsData ?? []);
     setPurchases(purchasesData ?? []);
     setOpenCaisseSessionId(sessionData?.id ?? null);
+
+    if (purchasesData && purchasesData.length > 0) {
+      const { data: lineRows } = await supabase
+        .from("purchase_lines")
+        .select("purchase_id, quantity, unit_cost, products(name, sku, unit)")
+        .in(
+          "purchase_id",
+          purchasesData.map((p) => p.id),
+        );
+
+      const detailMap: Record<string, PurchaseLineDetail[]> = {};
+      for (const row of (lineRows as unknown as {
+        purchase_id: string;
+        quantity: number;
+        unit_cost: number | null;
+        products: { name: string; sku: string | null; unit: string } | null;
+      }[]) ?? []) {
+        if (!row.products) continue;
+        if (!detailMap[row.purchase_id]) detailMap[row.purchase_id] = [];
+        detailMap[row.purchase_id].push({
+          name: row.products.name,
+          sku: row.products.sku,
+          unit: row.products.unit,
+          quantity: row.quantity,
+          unitCost: row.unit_cost ?? 0,
+        });
+      }
+      setPurchaseLineDetails(detailMap);
+    } else {
+      setPurchaseLineDetails({});
+    }
   }
 
   useEffect(() => {
@@ -179,50 +220,57 @@ export function PurchasesPage() {
 
         <div className="space-y-2">
           <label className="text-sm text-gray-600">Lignes</label>
-          {fields.map((field, index) => (
-            <div
-              key={field.id}
-              className="grid grid-cols-1 gap-2 border-b border-gray-100 pb-3 last:border-0 last:pb-0 sm:grid-cols-[2fr_1fr_1fr_auto] sm:items-start sm:border-0 sm:pb-0"
-            >
-              <div>
-                <select
-                  className="w-full rounded-md border border-gray-300 px-3 py-2"
-                  {...register(`lines.${index}.product_id` as const)}
-                >
-                  <option value="">Produit...</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-                {errors.lines?.[index]?.product_id && (
-                  <p className="text-xs text-red-600">{errors.lines[index]?.product_id?.message}</p>
-                )}
-              </div>
-              <input
-                type="number"
-                step="0.001"
-                placeholder="Qté"
-                className="w-full rounded-md border border-gray-300 px-3 py-2"
-                {...register(`lines.${index}.quantity` as const)}
-              />
-              <input
-                type="number"
-                step="0.01"
-                placeholder="Coût unitaire (FBU)"
-                className="w-full rounded-md border border-gray-300 px-3 py-2"
-                {...register(`lines.${index}.unit_cost` as const)}
-              />
-              <button
-                type="button"
-                onClick={() => remove(index)}
-                className="rounded-md bg-gray-100 px-3 py-2 text-sm text-gray-700 hover:bg-gray-200"
+          {fields.map((field, index) => {
+            const selectedProductId = watchedLines?.[index]?.product_id;
+            const selectedProduct = products.find((p) => p.id === selectedProductId);
+            return (
+              <div
+                key={field.id}
+                className="grid grid-cols-1 gap-2 border-b border-gray-100 pb-3 last:border-0 last:pb-0 sm:grid-cols-[2fr_1fr_1fr_1fr_auto] sm:items-start sm:border-0 sm:pb-0"
               >
-                Retirer
-              </button>
-            </div>
-          ))}
+                <div>
+                  <select
+                    className="w-full rounded-md border border-gray-300 px-3 py-2"
+                    {...register(`lines.${index}.product_id` as const)}
+                  >
+                    <option value="">Produit...</option>
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.lines?.[index]?.product_id && (
+                    <p className="text-xs text-red-600">{errors.lines[index]?.product_id?.message}</p>
+                  )}
+                </div>
+                <input
+                  type="number"
+                  step="0.001"
+                  placeholder="Qté"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2"
+                  {...register(`lines.${index}.quantity` as const)}
+                />
+                <div className="flex items-center rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500">
+                  {selectedProduct ? unitLabel(selectedProduct.unit) : "Unité"}
+                </div>
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="Coût unitaire (FBU)"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2"
+                  {...register(`lines.${index}.unit_cost` as const)}
+                />
+                <button
+                  type="button"
+                  onClick={() => remove(index)}
+                  className="rounded-md bg-gray-100 px-3 py-2 text-sm text-gray-700 hover:bg-gray-200"
+                >
+                  Retirer
+                </button>
+              </div>
+            );
+          })}
           {errors.lines?.root && <p className="text-sm text-red-600">{errors.lines.root.message}</p>}
           <button
             type="button"
@@ -283,12 +331,11 @@ export function PurchasesPage() {
                 ))}
               </div>
               {caisseBlocking && (
-                <p className="flex flex-wrap items-center gap-1.5 text-xs text-amber-600">
-                  Aucune caisse ouverte actuellement.
-                  <Link to="/pos" className="font-medium underline hover:text-amber-700">
-                    Ouvrir la caisse
-                  </Link>
-                </p>
+                <ErrorBox
+                  message="Aucune caisse ouverte actuellement. Ouvrez la caisse pour payer cette part au comptant, ou réglez-la autrement."
+                  fixLabel="Ouvrir la caisse"
+                  fixHref="/pos"
+                />
               )}
               {paidSource === "caisse" && openCaisseSessionId && (
                 <p className="text-xs text-gray-400">
@@ -305,7 +352,7 @@ export function PurchasesPage() {
           )}
         </div>
 
-        {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
+        {errorMessage && <ErrorBox message={errorMessage} onDismiss={() => setErrorMessage(null)} />}
         {successMessage && <p className="text-sm text-emerald-600">{successMessage}</p>}
 
         <button
@@ -327,6 +374,8 @@ export function PurchasesPage() {
               <thead className="text-left text-gray-500">
                 <tr>
                   <th className="pb-2">Date</th>
+                  <th className="pb-2">Articles achetés</th>
+                  <th className="pb-2">Quantité</th>
                   <th className="pb-2">Total</th>
                   <th className="pb-2">Payé</th>
                   <th className="pb-2">Crédit</th>
@@ -337,6 +386,26 @@ export function PurchasesPage() {
                 {purchases.map((p) => (
                   <tr key={p.id} className="border-t border-gray-100">
                     <td className="py-2 text-gray-900">{new Date(p.created_at).toLocaleString("fr-FR")}</td>
+                    <td className="py-2 text-gray-700">
+                      {(purchaseLineDetails[p.id] ?? []).length === 0 ? (
+                        "—"
+                      ) : (
+                        <ul className="space-y-0.5">
+                          {(purchaseLineDetails[p.id] ?? []).map((l, i) => (
+                            <li key={i} className="whitespace-nowrap text-xs">
+                              {l.name}
+                              {l.sku && <span className="text-gray-400"> ({l.sku})</span>}{" "}
+                              <span className="text-gray-400">
+                                × {l.quantity} {unitShort(l.unit)} — {unitLabel(l.unit)}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </td>
+                    <td className="py-2 text-gray-700">
+                      {(purchaseLineDetails[p.id] ?? []).reduce((sum, l) => sum + l.quantity, 0)}
+                    </td>
                     <td className="py-2 text-gray-900">{formatCurrency(p.total_amount)}</td>
                     <td className="py-2 text-gray-700">
                       {formatCurrency(p.paid_amount)}

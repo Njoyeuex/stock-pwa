@@ -5,6 +5,7 @@ import { z } from "zod";
 import { supabase } from "../lib/supabaseClient";
 import { mapSupabaseError } from "../lib/errorMessages";
 import { formatCurrency } from "../lib/currency";
+import { ErrorBox } from "../components/ErrorBox";
 import { useAuth } from "../context/AuthContext";
 import type { Tables } from "../types/database.types";
 
@@ -113,7 +114,7 @@ export function CustomersPage() {
           <label className="text-sm text-gray-600">Téléphone</label>
           <input className={inputClass} {...register("phone")} />
         </div>
-        {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
+        {errorMessage && <ErrorBox message={errorMessage} onDismiss={() => setErrorMessage(null)} />}
         <button
           type="submit"
           disabled={isSubmitting}

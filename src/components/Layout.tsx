@@ -96,7 +96,7 @@ export function Layout() {
   });
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-100 text-gray-900 lg:flex-row">
+    <div className="flex min-h-screen flex-col bg-gray-100 text-gray-900 lg:h-screen lg:flex-row lg:overflow-hidden">
       <div className="flex items-center justify-between border-b border-black/40 bg-black px-4 py-3 lg:hidden">
         <div className="flex min-w-0 items-center gap-2">
           <Logo size={28} />
@@ -118,7 +118,7 @@ export function Layout() {
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-30 flex w-64 shrink-0 transform flex-col border-r border-black/40 bg-black p-4 transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-30 flex w-64 shrink-0 transform flex-col border-r border-black/40 bg-black p-4 transition-transform duration-200 ease-in-out lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -178,7 +178,7 @@ export function Layout() {
           </button>
         </div>
       </aside>
-      <main className="flex-1 overflow-x-auto p-8">
+      <main className="flex-1 overflow-x-auto p-8 lg:h-screen lg:overflow-y-auto">
         <Outlet />
       </main>
     </div>

@@ -6,6 +6,8 @@ import { supabase } from "../lib/supabaseClient";
 import { mapSupabaseError } from "../lib/errorMessages";
 import { productPhotoUrl } from "../lib/productImages";
 import { formatCurrency } from "../lib/currency";
+import { UNIT_OPTIONS, unitLabel } from "../lib/units";
+import { ErrorBox } from "../components/ErrorBox";
 import { useAuth } from "../context/AuthContext";
 import type { Tables } from "../types/database.types";
 
@@ -21,6 +23,7 @@ const productSchema = z.object({
   sale_price: z.coerce.number().min(0, "Doit être positif"),
   cost_price: z.coerce.number().min(0, "Doit être positif").optional(),
   reorder_threshold: z.coerce.number().min(0, "Doit être positif"),
+  initial_quantity: z.coerce.number().min(0, "Doit être positif ou nul").optional(),
 });
 
 type ProductFormValues = z.infer<typeof productSchema>;
@@ -32,19 +35,21 @@ const DEFAULT_PRODUCT_VALUES: ProductFormValues = {
   name: "",
   sku: "",
   barcode: "",
-  unit: "unite",
+  unit: "piece",
   category_id: "",
   sale_price: 0,
   cost_price: undefined,
   reorder_threshold: 0,
+  initial_quantity: 0,
 };
 
 const inputClass = "w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900";
 
 export function ProductsPage() {
-  const { currentOrgId, currentRole, currentPerms } = useAuth();
+  const { currentOrgId, currentStoreId, currentRole, currentPerms } = useAuth();
   const canWrite =
     currentRole === "proprietaire" || currentRole === "gerant" || currentPerms?.perm_catalog === true;
+  const canDelete = currentRole === "proprietaire" || currentRole === "gerant";
 
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -64,7 +69,7 @@ export function ProductsPage() {
     if (!currentOrgId) return;
     setLoading(true);
     const [{ data: productsData }, { data: categoriesData }] = await Promise.all([
-      supabase.from("products").select("*").eq("org_id", currentOrgId).order("name"),
+      supabase.from("products").select("*").eq("org_id", currentOrgId).eq("is_active", true).order("name"),
       supabase.from("product_categories").select("*").eq("org_id", currentOrgId).order("name"),
     ]);
     setProducts(productsData ?? []);
@@ -117,7 +122,26 @@ export function ProductsPage() {
       sale_price: p.sale_price,
       cost_price: costs[p.id],
       reorder_threshold: p.reorder_threshold,
+      initial_quantity: 0,
     });
+  }
+
+  async function deleteProduct(p: Product) {
+    if (
+      !window.confirm(
+        `Supprimer "${p.name}" du magasin ? Il n'apparaîtra plus dans le catalogue, la caisse ni le stock.`,
+      )
+    ) {
+      return;
+    }
+    setErrorMessage(null);
+    const { error } = await supabase.rpc("delete_product", { p_product_id: p.id });
+    if (error) {
+      setErrorMessage(mapSupabaseError(error));
+      return;
+    }
+    if (editingId === p.id) cancelEdit();
+    await loadAll();
   }
 
   function cancelEdit() {
@@ -159,6 +183,19 @@ export function ProductsPage() {
         return;
       }
       productId = created.id;
+
+      if (values.initial_quantity && values.initial_quantity > 0 && currentStoreId) {
+        const { error: stockError } = await supabase.rpc("adjust_stock", {
+          p_org_id: currentOrgId,
+          p_store_id: currentStoreId,
+          p_product_id: productId,
+          p_quantity_delta: values.initial_quantity,
+          p_note: "Quantité initiale à la création du produit",
+        });
+        if (stockError) {
+          setErrorMessage("Produit créé, mais l'ajout du stock initial a échoué. Ajustez le stock manuellement.");
+        }
+      }
     }
 
     if (values.cost_price !== undefined && productId) {
@@ -251,16 +288,38 @@ export function ProductsPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              <input className={inputClass} placeholder="Unité (ex: unité, kg)" {...productForm.register("unit")} />
-              <select className={inputClass} {...productForm.register("category_id")}>
-                <option value="">Sans catégorie</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <div>
+                <label className="text-xs text-gray-500">Quantité {editingId ? "" : "initiale"}</label>
+                <input
+                  type="number"
+                  step="0.001"
+                  disabled={!!editingId}
+                  placeholder="Quantité"
+                  className={`${inputClass} disabled:bg-gray-100 disabled:text-gray-400`}
+                  {...productForm.register("initial_quantity")}
+                />
+                {editingId && <p className="mt-1 text-xs text-gray-400">Ajustez le stock depuis la page Stock.</p>}
+              </div>
+              <div>
+                <label className="text-xs text-gray-500">Unité</label>
+                <select className={inputClass} {...productForm.register("unit")}>
+                  {UNIT_OPTIONS.map((u) => (
+                    <option key={u.value} value={u.value}>
+                      {u.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
+
+            <select className={inputClass} {...productForm.register("category_id")}>
+              <option value="">Sans catégorie</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div>
@@ -282,7 +341,7 @@ export function ProductsPage() {
               </div>
             </div>
 
-            {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
+            {errorMessage && <ErrorBox message={errorMessage} onDismiss={() => setErrorMessage(null)} />}
 
             <button
               type="submit"
@@ -295,7 +354,7 @@ export function ProductsPage() {
         </div>
       )}
 
-      {!canWrite && errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
+      {!canWrite && errorMessage && <ErrorBox message={errorMessage} onDismiss={() => setErrorMessage(null)} />}
 
       <div className="rounded-xl bg-white p-6 shadow-sm">
         <h2 className="mb-3 font-medium text-gray-900">Produits</h2>
@@ -314,7 +373,7 @@ export function ProductsPage() {
                   <th className="pb-2">Prix de vente</th>
                   {currentRole !== "caissier" && currentRole !== "vendeur" && <th className="pb-2">Coût</th>}
                   <th className="pb-2">Seuil réappro.</th>
-                  {canWrite && <th className="pb-2"></th>}
+                  {(canWrite || canDelete) && <th className="pb-2"></th>}
                 </tr>
               </thead>
               <tbody>
@@ -330,7 +389,7 @@ export function ProductsPage() {
                         )}
                       </td>
                       <td className="py-2 text-gray-900">{p.name}</td>
-                      <td className="py-2 text-gray-700">{p.unit}</td>
+                      <td className="py-2 text-gray-700">{unitLabel(p.unit)}</td>
                       <td className="py-2 text-gray-700">{formatCurrency(p.sale_price)}</td>
                       {currentRole !== "caissier" && currentRole !== "vendeur" && (
                         <td className="py-2 text-gray-700">
@@ -338,14 +397,26 @@ export function ProductsPage() {
                         </td>
                       )}
                       <td className="py-2 text-gray-700">{p.reorder_threshold}</td>
-                      {canWrite && (
+                      {(canWrite || canDelete) && (
                         <td className="py-2 text-right">
-                          <button
-                            onClick={() => startEdit(p)}
-                            className="rounded-md bg-gray-100 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-200"
-                          >
-                            Modifier
-                          </button>
+                          <div className="flex justify-end gap-2">
+                            {canWrite && (
+                              <button
+                                onClick={() => startEdit(p)}
+                                className="rounded-md bg-gray-100 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-200"
+                              >
+                                Modifier
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button
+                                onClick={() => deleteProduct(p)}
+                                className="rounded-md bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100"
+                              >
+                                Supprimer
+                              </button>
+                            )}
+                          </div>
                         </td>
                       )}
                     </tr>

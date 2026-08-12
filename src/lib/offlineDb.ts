@@ -6,6 +6,8 @@ export interface CachedProduct {
   name: string;
   sale_price: number;
   reorder_threshold: number;
+  unit: string;
+  image_path: string | null;
   quantity: number;
 }
 
