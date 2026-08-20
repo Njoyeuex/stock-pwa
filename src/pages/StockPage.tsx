@@ -218,7 +218,7 @@ export function StockPage() {
               </thead>
               <tbody>
                 {rows.map((r) => {
-                  const status = r.products ? stockStatus(r.quantity, r.products.reorder_threshold) : "ok";
+                  const status = stockStatus(r.quantity);
                   const low = status !== "ok";
                   return (
                     <tr key={`${r.product_id}-${r.store_id}`} className="border-t border-gray-100">

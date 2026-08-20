@@ -151,7 +151,7 @@ export function DashboardPage() {
               <tbody>
                 {filteredRows.map((r) => {
                   const photoUrl = productPhotoUrl(r.image_path);
-                  const status = stockStatus(r.quantity, r.reorder_threshold);
+                  const status = stockStatus(r.quantity);
                   return (
                     <tr key={r.id} className="border-b border-gray-100 last:border-0">
                       <td className="px-4 py-3 text-gray-500">{r.sku ?? "—"}</td>

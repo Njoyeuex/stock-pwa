@@ -954,7 +954,7 @@ export function POSPage() {
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
                   {filteredItems.map((item) => {
                     const low =
-                      item.kind === "product" && stockStatus(item.quantity ?? 0, item.reorderThreshold ?? 0) !== "ok";
+                      item.kind === "product" && stockStatus(item.quantity ?? 0) !== "ok";
                     const photoUrl = item.kind === "product" ? productPhotoUrl(item.imagePath) : null;
                     return (
                       <button
