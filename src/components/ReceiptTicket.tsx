@@ -49,6 +49,9 @@ export function ReceiptTicket({ data }: { data: ReceiptData }) {
         {data.storeName}
         {data.storeCity ? ` • ${data.storeCity}` : ""}
       </p>
+      <p className="text-center">Galerie ISHAKA, Avenue de l'Université n°69</p>
+      <p className="text-center">NIF : 4001612615 — RC : 29052/21</p>
+      <p className="text-center">Tél : +257 79078178 / 67300300</p>
       <p>{DOUBLE_RULE}</p>
       <p className="text-center font-bold">TICKET DE VENTE / REÇU</p>
       <p>{DOUBLE_RULE}</p>

@@ -35,6 +35,8 @@ const schema = z.object({
         product_id: z.string().uuid("Choisir un produit"),
         quantity: z.coerce.number().positive("Doit être positif"),
         unit_cost: z.coerce.number().min(0, "Doit être positif"),
+        sku: z.string().max(50).optional().or(z.literal("")),
+        sale_price: z.coerce.number().min(0, "Doit être positif").optional(),
       }),
     )
     .min(1, "Ajoutez au moins une ligne"),
@@ -58,6 +60,7 @@ export function PurchasesPage() {
     handleSubmit,
     reset,
     watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -65,9 +68,15 @@ export function PurchasesPage() {
       paid_source: "other",
       credit_amount: 0,
       due_date: "",
-      lines: [{ product_id: "", quantity: 1, unit_cost: 0 }],
+      lines: [{ product_id: "", quantity: 1, unit_cost: 0, sku: "", sale_price: 0 }],
     },
   });
+
+  function onSelectProduct(index: number, productId: string) {
+    const product = products.find((p) => p.id === productId);
+    setValue(`lines.${index}.sku` as const, product?.sku ?? "");
+    setValue(`lines.${index}.sale_price` as const, product?.sale_price ?? 0);
+  }
 
   const paidSource = watch("paid_source");
   const watchedLines = watch("lines");
@@ -185,14 +194,33 @@ export function PurchasesPage() {
     const parts: string[] = ["Achat enregistré, stock mis à jour"];
     if (paid > 0 && values.paid_source === "caisse") parts.push(`${formatCurrency(paid)} débité de la caisse`);
     if (credit > 0) parts.push(`${formatCurrency(credit)} à crédit`);
-    setSuccessMessage(parts.join(" — ") + ".");
+
+    let productUpdateError: string | null = null;
+    for (const line of values.lines) {
+      const product = products.find((p) => p.id === line.product_id);
+      if (!product) continue;
+      const nextSku = line.sku || null;
+      const nextSalePrice = line.sale_price ?? product.sale_price;
+      if (nextSku === product.sku && nextSalePrice === product.sale_price) continue;
+      const { error: updateError } = await supabase
+        .from("products")
+        .update({ sku: nextSku, sale_price: nextSalePrice })
+        .eq("id", product.id);
+      if (updateError) productUpdateError = mapSupabaseError(updateError);
+    }
+    if (productUpdateError) {
+      setSuccessMessage(null);
+      setErrorMessage(`${parts.join(" — ")}, mais la mise à jour du SKU/prix de vente a échoué : ${productUpdateError}`);
+    } else {
+      setSuccessMessage(parts.join(" — ") + ".");
+    }
 
     reset({
       supplier_id: values.supplier_id,
       paid_source: values.paid_source,
       credit_amount: 0,
       due_date: "",
-      lines: [{ product_id: "", quantity: 1, unit_cost: 0 }],
+      lines: [{ product_id: "", quantity: 1, unit_cost: 0, sku: "", sale_price: 0 }],
     });
     await loadAll();
   }
@@ -231,7 +259,9 @@ export function PurchasesPage() {
                 <div>
                   <select
                     className="w-full rounded-md border border-gray-300 px-3 py-2"
-                    {...register(`lines.${index}.product_id` as const)}
+                    {...register(`lines.${index}.product_id` as const, {
+                      onChange: (e) => onSelectProduct(index, e.target.value),
+                    })}
                   >
                     <option value="">Produit...</option>
                     {products.map((p) => (
@@ -257,7 +287,7 @@ export function PurchasesPage() {
                 <input
                   type="number"
                   step="0.01"
-                  placeholder="Coût unitaire (FBU)"
+                  placeholder="Coût d'achat (FBU)"
                   className="w-full rounded-md border border-gray-300 px-3 py-2"
                   {...register(`lines.${index}.unit_cost` as const)}
                 />
@@ -268,13 +298,35 @@ export function PurchasesPage() {
                 >
                   Retirer
                 </button>
+                {selectedProduct && (
+                  <div className="grid grid-cols-2 gap-2 sm:col-span-4">
+                    <div>
+                      <label className="text-xs text-gray-500">SKU</label>
+                      <input
+                        placeholder="SKU"
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                        {...register(`lines.${index}.sku` as const)}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500">Prix de vente (FBU)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Prix de vente"
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                        {...register(`lines.${index}.sale_price` as const)}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
           {errors.lines?.root && <p className="text-sm text-red-600">{errors.lines.root.message}</p>}
           <button
             type="button"
-            onClick={() => append({ product_id: "", quantity: 1, unit_cost: 0 })}
+            onClick={() => append({ product_id: "", quantity: 1, unit_cost: 0, sku: "", sale_price: 0 })}
             className="rounded-md bg-gray-100 px-3 py-2 text-sm text-gray-700 hover:bg-gray-200"
           >
             + Ajouter une ligne

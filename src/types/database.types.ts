@@ -1211,7 +1211,12 @@ export type Database = {
         Returns: string
       }
       record_customer_repayment: {
-        Args: { p_amount: number; p_customer_id: string; p_note?: string }
+        Args: {
+          p_amount: number
+          p_caisse_session_id?: string
+          p_customer_id: string
+          p_note?: string
+        }
         Returns: string
       }
       record_supplier_repayment: {

@@ -29,11 +29,13 @@ type RepaymentFormValues = z.infer<typeof repaymentSchema>;
 const inputClass = "w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900";
 
 export function CustomersPage() {
-  const { currentOrgId } = useAuth();
+  const { currentOrgId, currentStoreId } = useAuth();
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [repayError, setRepayError] = useState<string | null>(null);
   const [repayingId, setRepayingId] = useState<string | null>(null);
+  const [openCaisseSessionId, setOpenCaisseSessionId] = useState<string | null>(null);
 
   const {
     register,
@@ -47,24 +49,35 @@ export function CustomersPage() {
   async function loadCustomers() {
     if (!currentOrgId) return;
     setLoading(true);
-    const { data } = await supabase
-      .from("customers")
-      .select("*, customer_credit_balances(balance)")
-      .eq("org_id", currentOrgId)
-      .order("name");
+    const [{ data }, { data: sessionData }] = await Promise.all([
+      supabase
+        .from("customers")
+        .select("*, customer_credit_balances(balance)")
+        .eq("org_id", currentOrgId)
+        .order("name"),
+      currentStoreId
+        ? supabase
+            .from("caisse_sessions")
+            .select("id")
+            .eq("store_id", currentStoreId)
+            .eq("status", "open")
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
 
     setCustomers(
       ((data ?? []) as unknown as (Customer & { customer_credit_balances: { balance: number } | null })[]).map(
         (c) => ({ ...c, balance: c.customer_credit_balances?.balance ?? 0 }),
       ),
     );
+    setOpenCaisseSessionId(sessionData?.id ?? null);
     setLoading(false);
   }
 
   useEffect(() => {
     loadCustomers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentOrgId]);
+  }, [currentOrgId, currentStoreId]);
 
   async function onSubmitCustomer(values: CustomerFormValues) {
     if (!currentOrgId) return;
@@ -84,14 +97,19 @@ export function CustomersPage() {
 
   async function onSubmitRepayment(values: RepaymentFormValues) {
     if (!repayingId) return;
-    setErrorMessage(null);
+    if (!openCaisseSessionId) {
+      setRepayError("Aucune caisse ouverte. L'argent remboursé doit être ajouté à la caisse.");
+      return;
+    }
+    setRepayError(null);
     const { error } = await supabase.rpc("record_customer_repayment", {
       p_customer_id: repayingId,
       p_amount: values.amount,
+      p_caisse_session_id: openCaisseSessionId,
       p_note: values.note || undefined,
     });
     if (error) {
-      setErrorMessage(mapSupabaseError(error));
+      setRepayError(mapSupabaseError(error));
       return;
     }
     repaymentForm.reset();
@@ -126,6 +144,16 @@ export function CustomersPage() {
 
       <div className="rounded-xl bg-white p-6 shadow-sm">
         <h2 className="mb-3 font-medium text-gray-900">Liste</h2>
+        {repayError && (
+          <div className="mb-3">
+            <ErrorBox
+              message={repayError}
+              fixLabel={!openCaisseSessionId ? "Ouvrir la caisse" : undefined}
+              fixHref={!openCaisseSessionId ? "/pos" : undefined}
+              onDismiss={() => setRepayError(null)}
+            />
+          </div>
+        )}
         {loading ? (
           <p className="text-sm text-gray-500">Chargement...</p>
         ) : customers.length === 0 ? (
@@ -165,7 +193,9 @@ export function CustomersPage() {
                           />
                           <button
                             type="submit"
-                            className="rounded-md bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700"
+                            disabled={!openCaisseSessionId}
+                            title={!openCaisseSessionId ? "Ouvrez la caisse pour enregistrer un remboursement." : undefined}
+                            className="rounded-md bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             OK
                           </button>

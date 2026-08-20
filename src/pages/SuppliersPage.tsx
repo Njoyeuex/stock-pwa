@@ -181,7 +181,11 @@ export function SuppliersPage() {
 
       <div className="rounded-xl bg-white p-6 shadow-sm">
         <h2 className="mb-3 font-medium text-gray-900">Liste</h2>
-        {actionError && <p className="mb-3 text-sm text-red-600">{actionError}</p>}
+        {actionError && (
+          <div className="mb-3">
+            <ErrorBox message={actionError} onDismiss={() => setActionError(null)} />
+          </div>
+        )}
         {loading ? (
           <p className="text-sm text-gray-500">Chargement...</p>
         ) : suppliers.length === 0 ? (
