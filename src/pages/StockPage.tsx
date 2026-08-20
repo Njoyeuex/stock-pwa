@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Search } from "lucide-react";
+import { Search, AlertTriangle } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { mapSupabaseError } from "../lib/errorMessages";
 import { UNIT_OPTIONS, unitLabel } from "../lib/units";
+import { stockStatus } from "../lib/stockStatus";
 import { ErrorBox } from "../components/ErrorBox";
 import { useAuth } from "../context/AuthContext";
 import type { Tables } from "../types/database.types";
@@ -217,7 +218,8 @@ export function StockPage() {
               </thead>
               <tbody>
                 {rows.map((r) => {
-                  const low = r.products && r.quantity <= r.products.reorder_threshold;
+                  const status = r.products ? stockStatus(r.quantity, r.products.reorder_threshold) : "ok";
+                  const low = status !== "ok";
                   return (
                     <tr key={`${r.product_id}-${r.store_id}`} className="border-t border-gray-100">
                       <td className="py-2 text-gray-900">{r.products?.name ?? r.product_id}</td>
@@ -225,8 +227,11 @@ export function StockPage() {
                       <td className="py-2 text-gray-500">{unitLabel(r.products?.unit)}</td>
                       <td className="py-2 text-gray-700">{soldByProduct[r.product_id] ?? 0}</td>
                       <td className={`py-2 font-medium ${low ? "text-amber-600" : "text-gray-900"}`}>
-                        {r.quantity} {r.products?.unit}
-                        {low && " (stock bas)"}
+                        <span className="inline-flex items-center gap-1">
+                          {low && <AlertTriangle size={14} className="text-amber-500" />}
+                          {r.quantity} {r.products?.unit}
+                          {status === "out" ? " (rupture)" : status === "low" ? " (stock bas)" : ""}
+                        </span>
                       </td>
                     </tr>
                   );
