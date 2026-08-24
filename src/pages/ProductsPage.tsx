@@ -369,6 +369,7 @@ export function ProductsPage() {
                 <tr>
                   <th className="pb-2">Photo</th>
                   <th className="pb-2">Nom</th>
+                  <th className="pb-2">SKU</th>
                   <th className="pb-2">Unité</th>
                   <th className="pb-2">Prix de vente</th>
                   {currentRole !== "caissier" && currentRole !== "vendeur" && <th className="pb-2">Coût</th>}
@@ -389,6 +390,7 @@ export function ProductsPage() {
                         )}
                       </td>
                       <td className="py-2 text-gray-900">{p.name}</td>
+                      <td className="py-2 text-gray-500">{p.sku ?? "—"}</td>
                       <td className="py-2 text-gray-700">{unitLabel(p.unit)}</td>
                       <td className="py-2 text-gray-700">{formatCurrency(p.sale_price)}</td>
                       {currentRole !== "caissier" && currentRole !== "vendeur" && (
