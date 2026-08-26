@@ -740,6 +740,14 @@ export function POSPage() {
       });
     }
 
+    // A service is single-use: once sold, it disappears from the catalog until
+    // someone re-adds it from the Services page.
+    const usedServiceIds = cart.filter((l) => l.kind === "service").map((l) => l.id);
+    if (usedServiceIds.length > 0) {
+      await supabase.from("services").update({ is_active: false }).in("id", usedServiceIds);
+      setServices((prev) => prev.filter((s) => !usedServiceIds.includes(s.id)));
+    }
+
     setSubmitting(false);
     setCart([]);
     setPaymentMethod("cash");

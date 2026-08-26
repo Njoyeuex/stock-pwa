@@ -14,8 +14,12 @@ type LowStockRow = Tables<"low_stock_products">;
 type Payment = Tables<"payments">;
 
 interface CashMovementRow {
+  id: string;
   type: string;
   amount: number;
+  reason: string | null;
+  created_at: string;
+  created_by: string;
 }
 
 interface ServiceLineRow {
@@ -55,6 +59,7 @@ export function ReportPage() {
   const [currentCaisse, setCurrentCaisse] = useState<number | null>(null);
   const [supplierDebt, setSupplierDebt] = useState(0);
   const [saleLineDetails, setSaleLineDetails] = useState<Record<string, SaleLineDetail[]>>({});
+  const [namesById, setNamesById] = useState<Record<string, string>>({});
 
   async function load() {
     if (!currentOrgId) return;
@@ -75,10 +80,11 @@ export function ReportPage() {
         supabase.from("low_stock_products").select("*").eq("org_id", currentOrgId),
         supabase
           .from("cash_movements")
-          .select("type, amount, caisse_sessions!inner(org_id)")
+          .select("id, type, amount, reason, created_at, created_by, caisse_sessions!inner(org_id)")
           .eq("caisse_sessions.org_id", currentOrgId)
           .gte("created_at", rangeStart)
-          .lte("created_at", rangeEnd),
+          .lte("created_at", rangeEnd)
+          .order("created_at", { ascending: false }),
         supabase
           .from("sale_lines")
           .select("quantity, line_total, services(name), sales!inner(org_id, created_at, status)")
@@ -91,8 +97,19 @@ export function ReportPage() {
 
     setSales(salesData ?? []);
     setLowStock(lowStockData ?? []);
-    setCashMovements((cashMovementsData as unknown as CashMovementRow[]) ?? []);
+    const cashMovementRows = (cashMovementsData as unknown as CashMovementRow[]) ?? [];
+    setCashMovements(cashMovementRows);
     setServiceLines((serviceLinesData as unknown as ServiceLineRow[]) ?? []);
+
+    const userIds = Array.from(new Set(cashMovementRows.map((m) => m.created_by)));
+    if (userIds.length > 0) {
+      const { data: profilesData } = await supabase.from("profiles").select("id, full_name").in("id", userIds);
+      setNamesById(
+        Object.fromEntries((profilesData ?? []).map((p) => [p.id, p.full_name || "Utilisateur"])),
+      );
+    } else {
+      setNamesById({});
+    }
 
     if (salesData && salesData.length > 0) {
       const saleIds = salesData.map((s) => s.id);
@@ -397,6 +414,58 @@ export function ReportPage() {
                   </li>
                 ))}
               </ul>
+            )}
+          </div>
+
+          <div className="rounded-xl bg-white p-6 shadow-sm">
+            <h2 className="mb-3 font-medium text-gray-900">Historique des mouvements de caisse</h2>
+            {cashMovements.length === 0 ? (
+              <p className="text-sm text-gray-500">Aucun mouvement de caisse sur cette période.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-left text-gray-500">
+                    <tr>
+                      <th className="pb-2">Date</th>
+                      <th className="pb-2">Type</th>
+                      <th className="pb-2">Motif</th>
+                      <th className="pb-2">Par</th>
+                      <th className="pb-2">Montant</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cashMovements.map((m) => (
+                      <tr key={m.id} className="border-t border-gray-100">
+                        <td className="py-2 text-gray-700">
+                          {new Date(m.created_at).toLocaleString("fr-FR", {
+                            day: "2-digit",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </td>
+                        <td className="py-2">
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                              m.type === "in" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                            }`}
+                          >
+                            {m.type === "in" ? "Entrée" : "Sortie"}
+                          </span>
+                        </td>
+                        <td className="py-2 text-gray-700">{m.reason ?? "—"}</td>
+                        <td className="py-2 text-gray-500">{namesById[m.created_by] ?? "—"}</td>
+                        <td
+                          className={`py-2 font-medium ${m.type === "in" ? "text-emerald-600" : "text-red-600"}`}
+                        >
+                          {m.type === "in" ? "+" : "-"}
+                          {formatCurrency(m.amount)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
 
