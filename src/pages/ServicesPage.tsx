@@ -67,6 +67,16 @@ export function ServicesPage() {
     reset(DEFAULT_VALUES);
   }
 
+  async function reactivate(s: Service) {
+    setErrorMessage(null);
+    const { error } = await supabase.from("services").update({ is_active: true }).eq("id", s.id);
+    if (error) {
+      setErrorMessage(mapSupabaseError(error));
+      return;
+    }
+    await loadServices();
+  }
+
   async function onSubmit(values: FormValues) {
     if (!currentOrgId) return;
     setErrorMessage(null);
@@ -147,6 +157,7 @@ export function ServicesPage() {
                   <th className="pb-2">Nom</th>
                   <th className="pb-2">Description</th>
                   <th className="pb-2">Prix</th>
+                  <th className="pb-2">Statut</th>
                   {canWrite && <th className="pb-2"></th>}
                 </tr>
               </thead>
@@ -156,14 +167,33 @@ export function ServicesPage() {
                     <td className="py-2 text-gray-900">{s.name}</td>
                     <td className="py-2 text-gray-500">{s.description ?? "—"}</td>
                     <td className="py-2 text-gray-700">{formatCurrency(s.price)}</td>
+                    <td className="py-2">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                          s.is_active ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"
+                        }`}
+                      >
+                        {s.is_active ? "Disponible" : "Utilisé"}
+                      </span>
+                    </td>
                     {canWrite && (
                       <td className="py-2 text-right">
-                        <button
-                          onClick={() => startEdit(s)}
-                          className="rounded-md bg-gray-100 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-200"
-                        >
-                          Modifier
-                        </button>
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => startEdit(s)}
+                            className="rounded-md bg-gray-100 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-200"
+                          >
+                            Modifier
+                          </button>
+                          {!s.is_active && (
+                            <button
+                              onClick={() => reactivate(s)}
+                              className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+                            >
+                              Réactiver
+                            </button>
+                          )}
+                        </div>
                       </td>
                     )}
                   </tr>
