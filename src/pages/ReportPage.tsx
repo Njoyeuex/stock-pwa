@@ -52,6 +52,8 @@ interface SaleLineDetail {
   name: string;
   quantity: number;
   unit: string | null;
+  productId: string | null;
+  lineTotal: number;
 }
 
 function toDateInputValue(d: Date) {
@@ -167,7 +169,7 @@ export function ReportPage() {
         supabase.from("payments").select("*").in("sale_id", saleIds),
         supabase
           .from("sale_lines")
-          .select("sale_id, quantity, products(name, unit), services(name)")
+          .select("sale_id, product_id, quantity, line_total, products(name, unit), services(name)")
           .in("sale_id", saleIds),
       ]);
       setPayments(paymentsData ?? []);
@@ -175,14 +177,22 @@ export function ReportPage() {
       const detailMap: Record<string, SaleLineDetail[]> = {};
       for (const row of (lineRows as unknown as {
         sale_id: string;
+        product_id: string | null;
         quantity: number;
+        line_total: number;
         products: { name: string; unit: string } | null;
         services: { name: string } | null;
       }[]) ?? []) {
         const name = row.products?.name ?? row.services?.name ?? "—";
         const unit = row.products?.unit ?? null;
         if (!detailMap[row.sale_id]) detailMap[row.sale_id] = [];
-        detailMap[row.sale_id].push({ name, quantity: row.quantity, unit });
+        detailMap[row.sale_id].push({
+          name,
+          quantity: row.quantity,
+          unit,
+          productId: row.product_id,
+          lineTotal: row.line_total,
+        });
       }
       setSaleLineDetails(detailMap);
     } else {
@@ -262,6 +272,13 @@ export function ReportPage() {
   const grossProfit = profitRevenue - costOfGoodsSold;
   const marginPercent = profitRevenue > 0 ? (grossProfit / profitRevenue) * 100 : 0;
   const productsWithoutCost = productProfits.filter((p) => !p.hasCost).length;
+
+  function saleProfit(saleId: string) {
+    return (saleLineDetails[saleId] ?? []).reduce(
+      (sum, l) => sum + l.lineTotal - (l.productId ? l.quantity * (costsByProduct[l.productId] ?? 0) : 0),
+      0,
+    );
+  }
 
   const totalsByMethod = useMemo(() => {
     const completedSaleIds = new Set(completedSales.map((s) => s.id));
@@ -476,6 +493,7 @@ export function ReportPage() {
                     <th className="pb-2">Articles vendus</th>
                     <th className="pb-2">Statut</th>
                     <th className="pb-2">Total</th>
+                    {canSeeProfit && <th className="pb-2">Bénéfice</th>}
                     {canVoid && <th className="pb-2"></th>}
                   </tr>
                 </thead>
@@ -515,6 +533,17 @@ export function ReportPage() {
                         )}
                       </td>
                       <td className="py-2 text-gray-900">{formatCurrency(s.total_amount)}</td>
+                      {canSeeProfit && (
+                        <td className="py-2 font-medium">
+                          {s.status === "completed" ? (
+                            <span className={saleProfit(s.id) >= 0 ? "text-emerald-600" : "text-red-600"}>
+                              {formatCurrency(saleProfit(s.id))}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </td>
+                      )}
                       {canVoid && (
                         <td className="py-2 text-right">
                           {s.status === "completed" &&
