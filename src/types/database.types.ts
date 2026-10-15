@@ -1160,6 +1160,7 @@ export type Database = {
       create_sale: {
         Args: {
           p_caisse_session_id?: string
+          p_cash_amount?: number
           p_customer_id?: string
           p_customer_name?: string
           p_lines: Json

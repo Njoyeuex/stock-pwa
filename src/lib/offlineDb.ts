@@ -45,7 +45,9 @@ export interface PendingSale {
   org_id: string;
   store_id: string;
   caisse_session_id: string | null;
-  payment_method: "cash" | "credit";
+  payment_method: "cash" | "credit" | "mixed";
+  // Cash part of a mixed sale; the rest goes on the customer's credit.
+  cash_amount?: number | null;
   customer_name: string | null;
   customer_id: string | null;
   lines: PendingSaleLine[];

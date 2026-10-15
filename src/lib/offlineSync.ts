@@ -39,6 +39,7 @@ export async function syncPendingSales(): Promise<SyncResult> {
       p_caisse_session_id: sale.caisse_session_id ?? undefined,
       p_customer_name: sale.customer_name ?? undefined,
       p_customer_id: sale.customer_id ?? undefined,
+      p_cash_amount: sale.cash_amount ?? undefined,
     });
 
     if (error) {

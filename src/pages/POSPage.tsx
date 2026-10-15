@@ -32,9 +32,12 @@ import type { Tables } from "../types/database.types";
 type CaisseSession = Tables<"caisse_sessions">;
 type Customer = Tables<"customers">;
 
-const PAYMENT_METHODS: { value: "cash" | "credit"; label: string }[] = [
+type PaymentMethod = "cash" | "credit" | "mixed";
+
+const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
   { value: "cash", label: "Espèces" },
   { value: "credit", label: "À crédit" },
+  { value: "mixed", label: "Espèces + crédit" },
 ];
 
 interface CatalogProduct {
@@ -105,7 +108,7 @@ export function POSPage() {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "credit">("cash");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [customerName, setCustomerName] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
@@ -623,14 +626,25 @@ export function POSPage() {
 
   async function finalizeSale() {
     if (!currentOrgId || !currentStoreId || cart.length === 0) return;
-    if (paymentMethod === "credit" && !selectedCustomerId) {
+    const usesCredit = paymentMethod === "credit" || paymentMethod === "mixed";
+    const usesCash = paymentMethod === "cash" || paymentMethod === "mixed";
+    const cashPart = paymentMethod === "mixed" ? Number(amountReceived) : paymentMethod === "cash" ? total : 0;
+    if (usesCredit && !selectedCustomerId) {
       setErrorMessage("Choisissez un client pour une vente à crédit.");
       return;
     }
-    if (paymentMethod === "cash" && !caisseSession) {
+    if (usesCash && !caisseSession) {
       setErrorMessage("Ouvrez la caisse avant d'encaisser une vente en espèces.");
       return;
     }
+    if (paymentMethod === "mixed" && !(cashPart > 0 && cashPart < total)) {
+      setErrorMessage("La partie en espèces doit être supérieure à 0 et inférieure au total.");
+      return;
+    }
+    const paymentLabel =
+      paymentMethod === "mixed"
+        ? `Espèces ${formatCurrency(cashPart)} + crédit ${formatCurrency(total - cashPart)}`
+        : (PAYMENT_METHODS.find((m) => m.value === paymentMethod)?.label ?? paymentMethod);
     for (const line of cart) {
       if (line.kind !== "product") continue;
       const product = products.find((p) => p.id === line.id);
@@ -661,7 +675,8 @@ export function POSPage() {
           p_payment_method: paymentMethod,
           p_caisse_session_id: caisseSession?.id,
           p_customer_name: customerName || undefined,
-          p_customer_id: paymentMethod === "credit" ? selectedCustomerId : undefined,
+          p_customer_id: usesCredit ? selectedCustomerId : undefined,
+          p_cash_amount: paymentMethod === "mixed" ? cashPart : undefined,
         });
 
         if (error) {
@@ -684,8 +699,9 @@ export function POSPage() {
         store_id: currentStoreId,
         caisse_session_id: caisseSession?.id ?? null,
         payment_method: paymentMethod,
+        cash_amount: paymentMethod === "mixed" ? cashPart : null,
         customer_name: customerName || null,
-        customer_id: paymentMethod === "credit" ? selectedCustomerId : null,
+        customer_id: usesCredit ? selectedCustomerId : null,
         lines: cart.map((l) => ({
           product_id: l.kind === "product" ? l.id : undefined,
           service_id: l.kind === "service" ? l.id : undefined,
@@ -698,8 +714,8 @@ export function POSPage() {
         created_at: new Date().toISOString(),
       });
       await refreshPendingCount();
-      if (paymentMethod === "cash") {
-        setCaisseBalance((prev) => (prev !== null ? prev + total : prev));
+      if (usesCash) {
+        setCaisseBalance((prev) => (prev !== null ? prev + cashPart : prev));
       }
 
       setLastReceipt({
@@ -710,7 +726,7 @@ export function POSPage() {
         saleNumber: 0,
         createdAt: new Date().toISOString(),
         cashierName,
-        paymentMethodLabel: PAYMENT_METHODS.find((m) => m.value === paymentMethod)?.label ?? paymentMethod,
+        paymentMethodLabel: paymentLabel,
         lines: cart.map((l) => ({ name: l.name, sku: l.sku, quantity: l.quantity, unit_price: l.unit_price })),
         total,
         offline: true,
@@ -722,7 +738,7 @@ export function POSPage() {
         .eq("id", saleId)
         .maybeSingle();
 
-      if (paymentMethod === "cash" && caisseSession) {
+      if (usesCash && caisseSession) {
         await loadCaisseBalance(caisseSession.id);
       }
 
@@ -734,7 +750,7 @@ export function POSPage() {
         saleNumber: saleRow?.sale_number ?? 0,
         createdAt: saleRow?.created_at ?? new Date().toISOString(),
         cashierName,
-        paymentMethodLabel: PAYMENT_METHODS.find((m) => m.value === paymentMethod)?.label ?? paymentMethod,
+        paymentMethodLabel: paymentLabel,
         lines: cart.map((l) => ({ name: l.name, sku: l.sku, quantity: l.quantity, unit_price: l.unit_price })),
         total: saleRow?.total_amount ?? total,
       });
@@ -1093,7 +1109,7 @@ export function POSPage() {
                   </div>
 
                   <div className="space-y-3 border-t border-gray-200 p-4">
-                    {paymentMethod === "credit" ? (
+                    {paymentMethod === "credit" || paymentMethod === "mixed" ? (
                       <select
                         value={selectedCustomerId}
                         onChange={(e) => setSelectedCustomerId(e.target.value)}
@@ -1114,9 +1130,9 @@ export function POSPage() {
                         className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                       />
                     )}
-                    <div className="grid grid-cols-2 gap-1.5">
+                    <div className="grid grid-cols-3 gap-1.5">
                       {PAYMENT_METHODS.map((m) => {
-                        const disabled = m.value === "cash" && !caisseSession;
+                        const disabled = m.value !== "credit" && !caisseSession;
                         return (
                           <button
                             key={m.value}
@@ -1157,6 +1173,30 @@ export function POSPage() {
                           ))}
                       </div>
                     )}
+                    {paymentMethod === "mixed" && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-gray-500">Partie payée en espèces</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={amountReceived}
+                          onChange={(e) => setAmountReceived(e.target.value)}
+                          placeholder="Montant en espèces"
+                          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                        />
+                        {amountReceived !== "" &&
+                          (Number(amountReceived) > 0 && Number(amountReceived) < total ? (
+                            <p className="text-xs text-amber-600">
+                              Reste à crédit : {formatCurrency(total - Number(amountReceived))}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-red-600">
+                              La partie en espèces doit être entre 0 et {formatCurrency(total)}.
+                            </p>
+                          ))}
+                      </div>
+                    )}
                     {errorMessage && <ErrorBox message={errorMessage} onDismiss={() => setErrorMessage(null)} />}
                     <div className="flex items-center justify-between text-lg font-semibold text-gray-900">
                       <span>Total</span>
@@ -1166,7 +1206,9 @@ export function POSPage() {
                       onClick={finalizeSale}
                       disabled={
                         submitting ||
-                        (paymentMethod === "cash" && (amountReceived === "" || Number(amountReceived) < total))
+                        (paymentMethod === "cash" && (amountReceived === "" || Number(amountReceived) < total)) ||
+                        (paymentMethod === "mixed" &&
+                          !(Number(amountReceived) > 0 && Number(amountReceived) < total))
                       }
                       className="w-full rounded-md bg-red-600 py-2.5 font-medium text-white hover:bg-red-700 disabled:opacity-50"
                     >
