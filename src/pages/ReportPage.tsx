@@ -421,11 +421,8 @@ export function ReportPage() {
                   <p className="mt-1 text-2xl font-semibold text-gray-900">{marginPercent.toFixed(1)} %</p>
                 </div>
               </div>
-              <p className="mt-3 text-xs text-gray-400">
-                Bénéfice = ventes − (quantité vendue × prix d'achat moyen actuel). Les services sont comptés sans coût.
-              </p>
               {productsWithoutCost > 0 && (
-                <p className="mt-2 flex items-center gap-1 text-xs text-amber-600">
+                <p className="mt-3 flex items-center gap-1 text-xs text-amber-600">
                   <AlertTriangle size={14} />
                   {productsWithoutCost} produit(s) vendu(s) sans prix d'achat : le bénéfice est surestimé.
                 </p>
