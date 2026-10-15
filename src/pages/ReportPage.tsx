@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, AlertTriangle, FileClock } from "lucide-react";
+import { ArrowLeft, AlertTriangle, FileClock, TrendingUp } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { mapSupabaseError } from "../lib/errorMessages";
 import { formatCurrency } from "../lib/currency";
@@ -28,6 +28,26 @@ interface ServiceLineRow {
   services: { name: string } | null;
 }
 
+interface ProductLineRow {
+  product_id: string;
+  quantity: number;
+  line_total: number;
+  products: { name: string; unit: string } | null;
+}
+
+interface ProductProfit {
+  productId: string;
+  name: string;
+  unit: string | null;
+  quantity: number;
+  revenue: number;
+  cost: number;
+  hasCost: boolean;
+}
+
+// Roles allowed to read product_costs (see RLS policy product_costs_select).
+const COST_ROLES = ["proprietaire", "gerant", "magasinier"];
+
 interface SaleLineDetail {
   name: string;
   quantity: number;
@@ -42,6 +62,7 @@ export function ReportPage() {
   const { currentOrgId, currentRole, currentPerms } = useAuth();
   const canVoid =
     currentRole === "proprietaire" || currentRole === "gerant" || currentPerms?.perm_invoices === true;
+  const canSeeProfit = !!currentRole && COST_ROLES.includes(currentRole);
 
   const today = new Date();
   const [fromDate, setFromDate] = useState(toDateInputValue(today));
@@ -52,6 +73,8 @@ export function ReportPage() {
   const [lowStock, setLowStock] = useState<LowStockRow[]>([]);
   const [cashMovements, setCashMovements] = useState<CashMovementRow[]>([]);
   const [serviceLines, setServiceLines] = useState<ServiceLineRow[]>([]);
+  const [productLines, setProductLines] = useState<ProductLineRow[]>([]);
+  const [costsByProduct, setCostsByProduct] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [voidingId, setVoidingId] = useState<string | null>(null);
@@ -68,8 +91,13 @@ export function ReportPage() {
     const rangeStart = new Date(`${fromDate}T00:00:00`).toISOString();
     const rangeEnd = new Date(`${toDate}T23:59:59.999`).toISOString();
 
-    const [{ data: salesData }, { data: lowStockData }, { data: cashMovementsData }, { data: serviceLinesData }] =
-      await Promise.all([
+    const [
+      { data: salesData },
+      { data: lowStockData },
+      { data: cashMovementsData },
+      { data: serviceLinesData },
+      { data: productLinesData },
+    ] = await Promise.all([
         supabase
           .from("sales")
           .select("*")
@@ -93,6 +121,14 @@ export function ReportPage() {
           .eq("sales.status", "completed")
           .gte("sales.created_at", rangeStart)
           .lte("sales.created_at", rangeEnd),
+        supabase
+          .from("sale_lines")
+          .select("product_id, quantity, line_total, products(name, unit), sales!inner(org_id, created_at, status)")
+          .not("product_id", "is", null)
+          .eq("sales.org_id", currentOrgId)
+          .eq("sales.status", "completed")
+          .gte("sales.created_at", rangeStart)
+          .lte("sales.created_at", rangeEnd),
       ]);
 
     setSales(salesData ?? []);
@@ -100,6 +136,20 @@ export function ReportPage() {
     const cashMovementRows = (cashMovementsData as unknown as CashMovementRow[]) ?? [];
     setCashMovements(cashMovementRows);
     setServiceLines((serviceLinesData as unknown as ServiceLineRow[]) ?? []);
+    const productLineRows = (productLinesData as unknown as ProductLineRow[]) ?? [];
+    setProductLines(productLineRows);
+
+    // Cost prices are hidden from caissier/vendeur by RLS, so only fetch them for allowed roles.
+    const soldProductIds = Array.from(new Set(productLineRows.map((l) => l.product_id)));
+    if (canSeeProfit && soldProductIds.length > 0) {
+      const { data: costsData } = await supabase
+        .from("product_costs")
+        .select("product_id, cost_price")
+        .in("product_id", soldProductIds);
+      setCostsByProduct(Object.fromEntries((costsData ?? []).map((c) => [c.product_id, c.cost_price])));
+    } else {
+      setCostsByProduct({});
+    }
 
     const userIds = Array.from(new Set(cashMovementRows.map((m) => m.created_by)));
     if (userIds.length > 0) {
@@ -184,6 +234,34 @@ export function ReportPage() {
   const cashIn = cashMovements.filter((m) => m.type === "in").reduce((sum, m) => sum + m.amount, 0);
   const cashOut = cashMovements.filter((m) => m.type === "out").reduce((sum, m) => sum + m.amount, 0);
   const servicesTotal = serviceLines.reduce((sum, l) => sum + l.line_total, 0);
+
+  // Profit = revenue - (quantity sold × current weighted-average cost price). Services have no cost.
+  const productProfits = useMemo(() => {
+    const byProduct: Record<string, ProductProfit> = {};
+    for (const l of productLines) {
+      const unitCost = costsByProduct[l.product_id];
+      const entry = (byProduct[l.product_id] ??= {
+        productId: l.product_id,
+        name: l.products?.name ?? "—",
+        unit: l.products?.unit ?? null,
+        quantity: 0,
+        revenue: 0,
+        cost: 0,
+        hasCost: unitCost !== undefined && unitCost > 0,
+      });
+      entry.quantity += l.quantity;
+      entry.revenue += l.line_total;
+      entry.cost += l.quantity * (unitCost ?? 0);
+    }
+    return Object.values(byProduct).sort((a, b) => b.revenue - b.cost - (a.revenue - a.cost));
+  }, [productLines, costsByProduct]);
+
+  const productsRevenue = productProfits.reduce((sum, p) => sum + p.revenue, 0);
+  const costOfGoodsSold = productProfits.reduce((sum, p) => sum + p.cost, 0);
+  const profitRevenue = productsRevenue + servicesTotal;
+  const grossProfit = profitRevenue - costOfGoodsSold;
+  const marginPercent = profitRevenue > 0 ? (grossProfit / profitRevenue) * 100 : 0;
+  const productsWithoutCost = productProfits.filter((p) => !p.hasCost).length;
 
   const totalsByMethod = useMemo(() => {
     const completedSaleIds = new Set(completedSales.map((s) => s.id));
@@ -299,6 +377,89 @@ export function ReportPage() {
               <p className="mt-1 text-3xl font-semibold text-red-600">{formatCurrency(cashOut)}</p>
             </div>
           </div>
+
+          {canSeeProfit && (
+            <div className="rounded-xl bg-white p-6 shadow-sm">
+              <h2 className="mb-4 flex items-center gap-2 font-medium text-gray-900">
+                <TrendingUp size={18} className="text-emerald-600" />
+                Bénéfices sur la période
+              </h2>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-lg bg-gray-50 p-4">
+                  <p className="text-sm text-gray-500">Chiffre d'affaires</p>
+                  <p className="mt-1 text-2xl font-semibold text-gray-900">{formatCurrency(profitRevenue)}</p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-4">
+                  <p className="text-sm text-gray-500">Coût d'achat des produits vendus</p>
+                  <p className="mt-1 text-2xl font-semibold text-red-600">{formatCurrency(costOfGoodsSold)}</p>
+                </div>
+                <div className="rounded-lg bg-emerald-50 p-4">
+                  <p className="text-sm text-emerald-700">Bénéfice brut</p>
+                  <p className={`mt-1 text-2xl font-bold ${grossProfit >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                    {formatCurrency(grossProfit)}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-4">
+                  <p className="text-sm text-gray-500">Marge</p>
+                  <p className="mt-1 text-2xl font-semibold text-gray-900">{marginPercent.toFixed(1)} %</p>
+                </div>
+              </div>
+              <p className="mt-3 text-xs text-gray-400">
+                Bénéfice = ventes − (quantité vendue × prix d'achat moyen actuel). Les services sont comptés sans coût.
+              </p>
+              {productsWithoutCost > 0 && (
+                <p className="mt-2 flex items-center gap-1 text-xs text-amber-600">
+                  <AlertTriangle size={14} />
+                  {productsWithoutCost} produit(s) vendu(s) sans prix d'achat : le bénéfice est surestimé.
+                </p>
+              )}
+
+              {productProfits.length > 0 && (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="text-left text-gray-500">
+                      <tr>
+                        <th className="pb-2">Produit</th>
+                        <th className="pb-2">Qté vendue</th>
+                        <th className="pb-2">Ventes</th>
+                        <th className="pb-2">Coût</th>
+                        <th className="pb-2">Bénéfice</th>
+                        <th className="pb-2">Marge</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {productProfits.map((p) => {
+                        const profit = p.revenue - p.cost;
+                        return (
+                          <tr key={p.productId} className="border-t border-gray-100">
+                            <td className="py-2 text-gray-900">
+                              {p.name}
+                              {!p.hasCost && (
+                                <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+                                  Prix d'achat manquant
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2 text-gray-700">
+                              {p.quantity} {unitShort(p.unit)}
+                            </td>
+                            <td className="py-2 text-gray-700">{formatCurrency(p.revenue)}</td>
+                            <td className="py-2 text-gray-500">{formatCurrency(p.cost)}</td>
+                            <td className={`py-2 font-medium ${profit >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                              {formatCurrency(profit)}
+                            </td>
+                            <td className="py-2 text-gray-500">
+                              {p.revenue > 0 ? `${((profit / p.revenue) * 100).toFixed(1)} %` : "—"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="rounded-xl bg-white p-6 shadow-sm">
             <h2 className="mb-3 font-medium text-gray-900">Ventes sur la période</h2>
