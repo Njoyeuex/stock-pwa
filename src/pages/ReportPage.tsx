@@ -12,6 +12,7 @@ import type { Tables } from "../types/database.types";
 type Sale = Tables<"sales">;
 type LowStockRow = Tables<"low_stock_products">;
 type Payment = Tables<"payments">;
+type CaisseSession = Tables<"caisse_sessions">;
 
 interface CashMovementRow {
   id: string;
@@ -74,6 +75,7 @@ export function ReportPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [lowStock, setLowStock] = useState<LowStockRow[]>([]);
   const [cashMovements, setCashMovements] = useState<CashMovementRow[]>([]);
+  const [caisseSessions, setCaisseSessions] = useState<CaisseSession[]>([]);
   const [serviceLines, setServiceLines] = useState<ServiceLineRow[]>([]);
   const [productLines, setProductLines] = useState<ProductLineRow[]>([]);
   const [costsByProduct, setCostsByProduct] = useState<Record<string, number>>({});
@@ -99,6 +101,7 @@ export function ReportPage() {
       { data: cashMovementsData },
       { data: serviceLinesData },
       { data: productLinesData },
+      { data: caisseSessionsData },
     ] = await Promise.all([
         supabase
           .from("sales")
@@ -131,9 +134,19 @@ export function ReportPage() {
           .eq("sales.status", "completed")
           .gte("sales.created_at", rangeStart)
           .lte("sales.created_at", rangeEnd),
+        supabase
+          .from("caisse_sessions")
+          .select("*")
+          .eq("org_id", currentOrgId)
+          // Any session active during the period, including one opened earlier and closed (or still open) now.
+          .lte("opened_at", rangeEnd)
+          .or(`closed_at.gte.${rangeStart},closed_at.is.null`)
+          .order("opened_at", { ascending: false }),
       ]);
 
     setSales(salesData ?? []);
+    const caisseSessionRows = caisseSessionsData ?? [];
+    setCaisseSessions(caisseSessionRows);
     setLowStock(lowStockData ?? []);
     const cashMovementRows = (cashMovementsData as unknown as CashMovementRow[]) ?? [];
     setCashMovements(cashMovementRows);
@@ -153,7 +166,12 @@ export function ReportPage() {
       setCostsByProduct({});
     }
 
-    const userIds = Array.from(new Set(cashMovementRows.map((m) => m.created_by)));
+    const userIds = Array.from(
+      new Set([
+        ...cashMovementRows.map((m) => m.created_by),
+        ...caisseSessionRows.flatMap((s) => (s.closed_by ? [s.opened_by, s.closed_by] : [s.opened_by])),
+      ]),
+    );
     if (userIds.length > 0) {
       const { data: profilesData } = await supabase.from("profiles").select("id, full_name").in("id", userIds);
       setNamesById(
@@ -601,6 +619,84 @@ export function ReportPage() {
                   </li>
                 ))}
               </ul>
+            )}
+          </div>
+
+          <div className="rounded-xl bg-white p-6 shadow-sm">
+            <h2 className="mb-3 font-medium text-gray-900">Ouvertures et fermetures de caisse</h2>
+            {caisseSessions.length === 0 ? (
+              <p className="text-sm text-gray-500">Aucune caisse ouverte sur cette période.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-left text-gray-500">
+                    <tr>
+                      <th className="pb-2">Jour</th>
+                      <th className="pb-2">Ouverture</th>
+                      <th className="pb-2">Montant à l'ouverture</th>
+                      <th className="pb-2">Fermeture</th>
+                      <th className="pb-2">Montant à la fermeture</th>
+                      <th className="pb-2">Attendu</th>
+                      <th className="pb-2">Écart</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {caisseSessions.map((c) => (
+                      <tr key={c.id} className="border-t border-gray-100">
+                        <td className="py-2 whitespace-nowrap text-gray-900">
+                          {new Date(c.opened_at).toLocaleDateString("fr-FR", {
+                            weekday: "short",
+                            day: "2-digit",
+                            month: "short",
+                          })}
+                        </td>
+                        <td className="py-2 text-gray-700">
+                          {new Date(c.opened_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                          <span className="block text-xs text-gray-400">{namesById[c.opened_by] ?? "—"}</span>
+                        </td>
+                        <td className="py-2 font-medium text-gray-900">{formatCurrency(c.opening_float)}</td>
+                        <td className="py-2 text-gray-700">
+                          {c.status === "open" || !c.closed_at ? (
+                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
+                              Encore ouverte
+                            </span>
+                          ) : (
+                            <>
+                              {new Date(c.closed_at).toLocaleString("fr-FR", {
+                                ...(new Date(c.closed_at).toDateString() !== new Date(c.opened_at).toDateString()
+                                  ? { day: "2-digit", month: "short" }
+                                  : {}),
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                              <span className="block text-xs text-gray-400">
+                                {c.closed_by ? (namesById[c.closed_by] ?? "—") : "—"}
+                              </span>
+                            </>
+                          )}
+                        </td>
+                        <td className="py-2 font-medium text-gray-900">
+                          {c.closing_declared_cash !== null ? formatCurrency(c.closing_declared_cash) : "—"}
+                        </td>
+                        <td className="py-2 text-gray-500">
+                          {c.expected_cash !== null ? formatCurrency(c.expected_cash) : "—"}
+                        </td>
+                        <td
+                          className={`py-2 font-medium ${
+                            c.variance === null || c.variance === 0
+                              ? "text-gray-500"
+                              : c.variance > 0
+                                ? "text-emerald-600"
+                                : "text-red-600"
+                          }`}
+                        >
+                          {c.variance === null ? "—" : `${c.variance > 0 ? "+" : ""}${formatCurrency(c.variance)}`}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
 

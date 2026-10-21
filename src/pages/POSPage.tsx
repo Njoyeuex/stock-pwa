@@ -71,7 +71,7 @@ interface SellableItem {
 
 // Units sold by a variable amount (not just whole pieces) get a quantity prompt
 // instead of the default "click adds one" behavior.
-const QUANTITY_PROMPT_UNITS = new Set(["litre"]);
+const QUANTITY_PROMPT_UNITS = new Set(["litre", "metre", "cm"]);
 
 interface CartLine {
   kind: "product" | "service";
