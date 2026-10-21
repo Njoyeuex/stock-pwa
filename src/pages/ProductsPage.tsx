@@ -273,7 +273,7 @@ export function ProductsPage() {
             )}
 
             <div className="grid grid-cols-2 gap-2">
-              <input className={inputClass} placeholder="SKU" {...productForm.register("sku")} />
+              <input className={inputClass} placeholder="Réf" {...productForm.register("sku")} />
               <input className={inputClass} placeholder="Code-barres" {...productForm.register("barcode")} />
             </div>
 
@@ -369,7 +369,7 @@ export function ProductsPage() {
                 <tr>
                   <th className="pb-2">Photo</th>
                   <th className="pb-2">Nom</th>
-                  <th className="pb-2">SKU</th>
+                  <th className="pb-2">Réf</th>
                   <th className="pb-2">Unité</th>
                   <th className="pb-2">Prix de vente</th>
                   {currentRole !== "caissier" && currentRole !== "vendeur" && <th className="pb-2">Coût</th>}

@@ -210,7 +210,7 @@ export function PurchasesPage() {
     }
     if (productUpdateError) {
       setSuccessMessage(null);
-      setErrorMessage(`${parts.join(" — ")}, mais la mise à jour du SKU/prix de vente a échoué : ${productUpdateError}`);
+      setErrorMessage(`${parts.join(" — ")}, mais la mise à jour de la Réf/prix de vente a échoué : ${productUpdateError}`);
     } else {
       setSuccessMessage(parts.join(" — ") + ".");
     }
@@ -301,9 +301,9 @@ export function PurchasesPage() {
                 {selectedProduct && (
                   <div className="grid grid-cols-2 gap-2 sm:col-span-4">
                     <div>
-                      <label className="text-xs text-gray-500">SKU</label>
+                      <label className="text-xs text-gray-500">Réf</label>
                       <input
-                        placeholder="SKU"
+                        placeholder="Réf"
                         className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                         {...register(`lines.${index}.sku` as const)}
                       />

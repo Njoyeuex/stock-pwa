@@ -42,6 +42,11 @@ export function DashboardPage() {
   const canManage = currentRole === "proprietaire" || currentRole === "gerant";
 
   const [rows, setRows] = useState<InventoryRow[]>([]);
+  const [inventoryValue, setInventoryValue] = useState<{
+    cost_value: number;
+    sale_value: number;
+    products_in_stock: number;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
@@ -50,11 +55,16 @@ export function DashboardPage() {
       if (!currentOrgId) return;
       setLoading(true);
 
-      const { data: productsData } = await supabase
-        .from("products")
-        .select("id, sku, name, image_path, sale_price, reorder_threshold, updated_at, product_categories(name)")
-        .eq("org_id", currentOrgId)
-        .order("updated_at", { ascending: false });
+      // Org-wide totals come from an RPC so every role sees them without reading individual cost prices.
+      const [{ data: productsData }, { data: valueData }] = await Promise.all([
+        supabase
+          .from("products")
+          .select("id, sku, name, image_path, sale_price, reorder_threshold, updated_at, product_categories(name)")
+          .eq("org_id", currentOrgId)
+          .order("updated_at", { ascending: false }),
+        supabase.rpc("get_inventory_value", { p_org_id: currentOrgId }),
+      ]);
+      setInventoryValue(valueData?.[0] ?? null);
 
       const products = (productsData as unknown as ProductQueryRow[]) ?? [];
 
@@ -126,6 +136,26 @@ export function DashboardPage() {
         </div>
       </div>
 
+      {inventoryValue && (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="rounded-xl bg-blue-900 p-6 text-white shadow-sm">
+            <p className="text-sm text-blue-200">Valeur de l'inventaire (prix d'achat)</p>
+            <p className="mt-1 text-3xl font-bold">{formatCurrency(inventoryValue.cost_value)}</p>
+            <p className="mt-1 text-xs text-blue-200">Ce que le stock actuel a coûté.</p>
+          </div>
+          <div className="rounded-xl bg-white p-6 shadow-sm">
+            <p className="text-sm text-gray-500">Valeur de l'inventaire (prix de vente)</p>
+            <p className="mt-1 text-3xl font-semibold text-emerald-600">{formatCurrency(inventoryValue.sale_value)}</p>
+            <p className="mt-1 text-xs text-gray-400">Ce que rapporterait la vente de tout le stock.</p>
+          </div>
+          <div className="rounded-xl bg-white p-6 shadow-sm">
+            <p className="text-sm text-gray-500">Produits en stock</p>
+            <p className="mt-1 text-3xl font-semibold text-gray-900">{inventoryValue.products_in_stock}</p>
+            <p className="mt-1 text-xs text-gray-400">Articles avec une quantité supérieure à zéro.</p>
+          </div>
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-xl bg-white shadow-sm">
         {loading ? (
           <p className="p-6 text-sm text-gray-500">Chargement...</p>
@@ -138,7 +168,7 @@ export function DashboardPage() {
             <table className="w-full text-sm">
               <thead className="border-b border-gray-200 text-left text-gray-500">
                 <tr>
-                  <th className="px-4 py-3 font-medium">SKU</th>
+                  <th className="px-4 py-3 font-medium">Réf</th>
                   <th className="px-4 py-3 font-medium">Photo</th>
                   <th className="px-4 py-3 font-medium">Titre</th>
                   <th className="px-4 py-3 font-medium">Catégorie</th>

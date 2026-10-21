@@ -210,7 +210,7 @@ export function StockPage() {
               <thead className="text-left text-gray-500">
                 <tr>
                   <th className="pb-2">Produit</th>
-                  <th className="pb-2">SKU</th>
+                  <th className="pb-2">Réf</th>
                   <th className="pb-2">Unité</th>
                   <th className="pb-2">Quantité vendue</th>
                   <th className="pb-2">Quantité restante</th>

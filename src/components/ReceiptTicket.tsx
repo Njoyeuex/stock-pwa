@@ -66,7 +66,7 @@ export function ReceiptTicket({ data }: { data: ReceiptData }) {
         <div key={i}>
           <p>
             Produit : {l.name}
-            {l.sku ? ` (SKU: ${l.sku})` : ""}
+            {l.sku ? ` (Réf : ${l.sku})` : ""}
           </p>
           <p>Quantité : {l.quantity}</p>
           <p>

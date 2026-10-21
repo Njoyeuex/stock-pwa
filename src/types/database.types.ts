@@ -1172,6 +1172,10 @@ export type Database = {
       }
       delete_product: { Args: { p_product_id: string }; Returns: undefined }
       find_user_id_by_email: { Args: { p_email: string }; Returns: string }
+      get_inventory_value: {
+        Args: { p_org_id: string }
+        Returns: { cost_value: number; sale_value: number; products_in_stock: number }[]
+      }
       get_my_role: {
         Args: { p_org_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
