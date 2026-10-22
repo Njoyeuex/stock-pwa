@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Lock } from "lucide-react";
+import { Eye, EyeOff, Lock } from "lucide-react";
 import { login, AuthApiError } from "../lib/authApi";
 import { Logo } from "../components/Logo";
 
@@ -27,6 +27,7 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [lockedUntil, setLockedUntil] = useState<Date | null>(null);
   const [remainingMs, setRemainingMs] = useState(0);
+  const [showPassword, setShowPassword] = useState(false);
 
   const {
     register,
@@ -97,12 +98,23 @@ export function LoginPage() {
 
           <div className="space-y-1">
             <label className="text-sm text-gray-600">Mot de passe</label>
-            <input
-              type="password"
-              autoComplete="current-password"
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 disabled:bg-gray-100"
-              {...register("password")}
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                className="w-full rounded-md border border-gray-300 bg-white py-2 pl-3 pr-10 text-gray-900 disabled:bg-gray-100"
+                {...register("password")}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                title={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-700"
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
             {errors.password && <p className="text-sm text-red-600">{errors.password.message}</p>}
           </div>
 

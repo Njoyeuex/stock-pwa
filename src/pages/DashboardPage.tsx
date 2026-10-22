@@ -111,7 +111,7 @@ export function DashboardPage() {
   }, [rows, search]);
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 ${inventoryValue ? "pb-28" : ""}`}>
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
@@ -135,26 +135,6 @@ export function DashboardPage() {
           )}
         </div>
       </div>
-
-      {inventoryValue && (
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div className="rounded-xl bg-blue-900 p-6 text-white shadow-sm">
-            <p className="text-sm text-blue-200">Valeur de l'inventaire (prix d'achat)</p>
-            <p className="mt-1 text-3xl font-bold">{formatCurrency(inventoryValue.cost_value)}</p>
-            <p className="mt-1 text-xs text-blue-200">Ce que le stock actuel a coûté.</p>
-          </div>
-          <div className="rounded-xl bg-white p-6 shadow-sm">
-            <p className="text-sm text-gray-500">Valeur de l'inventaire (prix de vente)</p>
-            <p className="mt-1 text-3xl font-semibold text-emerald-600">{formatCurrency(inventoryValue.sale_value)}</p>
-            <p className="mt-1 text-xs text-gray-400">Ce que rapporterait la vente de tout le stock.</p>
-          </div>
-          <div className="rounded-xl bg-white p-6 shadow-sm">
-            <p className="text-sm text-gray-500">Produits en stock</p>
-            <p className="mt-1 text-3xl font-semibold text-gray-900">{inventoryValue.products_in_stock}</p>
-            <p className="mt-1 text-xs text-gray-400">Articles avec une quantité supérieure à zéro.</p>
-          </div>
-        </div>
-      )}
 
       <div className="overflow-hidden rounded-xl bg-white shadow-sm">
         {loading ? (
@@ -217,6 +197,27 @@ export function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Pinned to the bottom of the screen (right of the sidebar on large screens), so
+          the inventory value stays visible while scrolling the product list. */}
+      {inventoryValue && (
+        <div className="fixed inset-x-0 bottom-0 z-10 border-t border-gray-200 bg-white/95 shadow-[0_-2px_8px_rgba(0,0,0,0.06)] backdrop-blur lg:left-64">
+          <div className="grid grid-cols-3 divide-x divide-gray-200 px-2 py-3 sm:px-6">
+            <div className="px-2">
+              <p className="text-[11px] text-gray-500 sm:text-xs">Valeur inventaire (prix d'achat)</p>
+              <p className="text-sm font-bold text-blue-900 sm:text-xl">{formatCurrency(inventoryValue.cost_value)}</p>
+            </div>
+            <div className="px-2">
+              <p className="text-[11px] text-gray-500 sm:text-xs">Valeur inventaire (prix de vente)</p>
+              <p className="text-sm font-bold text-emerald-600 sm:text-xl">{formatCurrency(inventoryValue.sale_value)}</p>
+            </div>
+            <div className="px-2">
+              <p className="text-[11px] text-gray-500 sm:text-xs">Produits en stock</p>
+              <p className="text-sm font-bold text-gray-900 sm:text-xl">{inventoryValue.products_in_stock}</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

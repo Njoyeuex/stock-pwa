@@ -3,7 +3,6 @@ export const UNIT_OPTIONS = [
   { value: "kg", label: "Kilogramme (kg)" },
   { value: "litre", label: "Litre (L)" },
   { value: "jet", label: "Jet (4 pièces)" },
-  { value: "metre", label: "Mètre (m)" },
   { value: "cm", label: "Centimètre (cm)" },
 ] as const;
 
@@ -22,7 +21,6 @@ export function unitShort(unit: string | null | undefined): string {
   if (unit === "kg") return "kg";
   if (unit === "litre") return "L";
   if (unit === "jet") return "jet";
-  if (unit === "metre") return "m";
   if (unit === "cm") return "cm";
   return unit;
 }
