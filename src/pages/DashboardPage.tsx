@@ -102,6 +102,9 @@ export function DashboardPage() {
     load();
   }, [currentOrgId]);
 
+  // product_stock is readable by every role, so the total quantity is summed here.
+  const totalQuantityInStock = rows.reduce((sum, r) => sum + Math.max(0, r.quantity), 0);
+
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return rows;
@@ -212,8 +215,13 @@ export function DashboardPage() {
               <p className="text-sm font-bold text-emerald-600 sm:text-xl">{formatCurrency(inventoryValue.sale_value)}</p>
             </div>
             <div className="px-2">
-              <p className="text-[11px] text-gray-500 sm:text-xs">Produits en stock</p>
-              <p className="text-sm font-bold text-gray-900 sm:text-xl">{inventoryValue.products_in_stock}</p>
+              <p className="text-[11px] text-gray-500 sm:text-xs">Quantité en stock</p>
+              <p className="text-sm font-bold text-gray-900 sm:text-xl">
+                {totalQuantityInStock.toLocaleString("fr-FR", { maximumFractionDigits: 3 })}
+                <span className="ml-1 text-[11px] font-normal text-gray-400 sm:text-xs">
+                  ({inventoryValue.products_in_stock} produits)
+                </span>
+              </p>
             </div>
           </div>
         </div>

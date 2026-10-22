@@ -372,7 +372,7 @@ export function ProductsPage() {
                   <th className="pb-2">Réf</th>
                   <th className="pb-2">Unité</th>
                   <th className="pb-2">Prix de vente</th>
-                  {currentRole !== "caissier" && currentRole !== "vendeur" && <th className="pb-2">Coût</th>}
+                  {currentRole !== "caissier" && currentRole !== "vendeur" && <th className="pb-2">Coût d'achat</th>}
                   <th className="pb-2">Seuil réappro.</th>
                   {(canWrite || canDelete) && <th className="pb-2"></th>}
                 </tr>
