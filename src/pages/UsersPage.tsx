@@ -5,7 +5,7 @@ import { z } from "zod";
 import { Eye, EyeOff } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { mapSupabaseError } from "../lib/errorMessages";
-import { adminCreateUser, adminDeleteUser, AuthApiError } from "../lib/authApi";
+import { adminCreateUser, adminDeleteUser, adminSetPassword, AuthApiError } from "../lib/authApi";
 import { ROLE_LABELS } from "../lib/roles";
 import { ErrorBox } from "../components/ErrorBox";
 import { useAuth, type AppRole, type MembershipPermissions } from "../context/AuthContext";
@@ -16,6 +16,7 @@ interface MemberRow extends MembershipPermissions {
   role: AppRole;
   is_active: boolean;
   full_name: string | null;
+  email: string | null;
 }
 
 // Only the propriétaire assigns roles, and only to roles it makes sense to hand out here;
@@ -26,7 +27,7 @@ const PERMISSION_FIELDS: { key: keyof MembershipPermissions; label: string }[] =
   { key: "perm_caisse", label: "Ouvrir ou fermer la caisse" },
   { key: "perm_catalog", label: "Modifier ou supprimer produits / services" },
   { key: "perm_invoices", label: "Modifier ou supprimer les factures (annuler une vente)" },
-  { key: "perm_users", label: "Créer ou supprimer des utilisateurs" },
+  { key: "perm_users", label: "Créer ou supprimer des utilisateurs (gérant : aussi changer leur mot de passe)" },
   { key: "perm_view_users", label: "Voir les utilisateurs" },
   { key: "perm_view_reports", label: "Voir les rapports" },
 ];
@@ -51,6 +52,9 @@ export function UsersPage() {
   const isOwner = currentRole === "proprietaire";
   const canManageUsers = isOwner || currentPerms?.perm_users === true;
   const canViewUsers = canManageUsers || currentPerms?.perm_view_users === true;
+  // Setting a password lets the caller sign in as that account, so it is narrower than
+  // perm_users alone: the owner, or a gérant the owner granted perm_users.
+  const canManageCredentials = isOwner || (currentRole === "gerant" && currentPerms?.perm_users === true);
 
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,7 +62,12 @@ export function UsersPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [passwordForId, setPasswordForId] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
 
   const {
     register,
@@ -91,6 +100,7 @@ export function UsersPage() {
 
     const rows = membershipsData ?? [];
     let profilesById = new Map<string, string | null>();
+    let emailsById = new Map<string, string>();
     if (rows.length > 0) {
       const { data: profilesData } = await supabase
         .from("profiles")
@@ -100,16 +110,27 @@ export function UsersPage() {
           rows.map((r) => r.user_id),
         );
       profilesById = new Map((profilesData ?? []).map((p) => [p.id, p.full_name]));
+
+      if (canManageCredentials) {
+        const { data: emailsData } = await supabase.rpc("get_org_member_emails", { p_org_id: currentOrgId });
+        emailsById = new Map((emailsData ?? []).map((e) => [e.user_id, e.email]));
+      }
     }
 
-    setMembers(rows.map((r) => ({ ...r, full_name: profilesById.get(r.user_id) ?? null })));
+    setMembers(
+      rows.map((r) => ({
+        ...r,
+        full_name: profilesById.get(r.user_id) ?? null,
+        email: emailsById.get(r.user_id) ?? null,
+      })),
+    );
     setLoading(false);
   }
 
   useEffect(() => {
     loadMembers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentOrgId]);
+  }, [currentOrgId, canManageCredentials]);
 
   async function onSubmit(values: FormValues) {
     if (!currentOrgId || !currentStoreId) return;
@@ -200,6 +221,41 @@ export function UsersPage() {
     await loadMembers();
   }
 
+  function openPasswordForm(membershipId: string) {
+    setActionError(null);
+    setActionSuccess(null);
+    setPasswordForId(membershipId);
+    setNewPassword("");
+    setShowNewPassword(false);
+  }
+
+  function closePasswordForm() {
+    setPasswordForId(null);
+    setNewPassword("");
+    setShowNewPassword(false);
+  }
+
+  async function savePassword(membershipId: string) {
+    if (!currentOrgId) return;
+    setActionError(null);
+    setActionSuccess(null);
+    if (newPassword.length < 8) {
+      setActionError("Le mot de passe doit contenir au moins 8 caractères.");
+      return;
+    }
+    setSavingPassword(true);
+    try {
+      await adminSetPassword({ org_id: currentOrgId, membership_id: membershipId, password: newPassword });
+    } catch (err) {
+      setActionError(err instanceof AuthApiError ? err.message : "Une erreur est survenue.");
+      return;
+    } finally {
+      setSavingPassword(false);
+    }
+    closePasswordForm();
+    setActionSuccess("Mot de passe modifié.");
+  }
+
   if (!canViewUsers) {
     return null;
   }
@@ -212,10 +268,12 @@ export function UsersPage() {
           Comptes rattachés à {storeName ?? "votre magasin"}. Chaque compte que vous créez ici est
           automatiquement limité à ce magasin, avec les droits du rôle choisi.
           {isOwner
-            ? " Vous seul pouvez attribuer un rôle, des permissions, bloquer ou supprimer un compte."
-            : canManageUsers
-              ? " Vous pouvez créer et supprimer des comptes ; seul le propriétaire gère les rôles, permissions et blocages."
-              : " Vous pouvez uniquement consulter la liste des comptes."}
+            ? " Vous seul pouvez attribuer un rôle, des permissions ou bloquer un compte. Vous pouvez aussi supprimer un compte ou lui définir un nouveau mot de passe."
+            : canManageCredentials
+              ? " Vous pouvez créer et supprimer des comptes et leur définir un nouveau mot de passe ; seul le propriétaire gère les rôles, permissions et blocages."
+              : canManageUsers
+                ? " Vous pouvez créer et supprimer des comptes ; seul le propriétaire gère les rôles, permissions et blocages."
+                : " Vous pouvez uniquement consulter la liste des comptes."}
         </p>
       </div>
 
@@ -301,6 +359,7 @@ export function UsersPage() {
       <div className="rounded-xl bg-white p-6 shadow-sm">
         <h2 className="mb-3 font-medium text-gray-900">Comptes existants</h2>
         {actionError && <p className="mb-3 text-sm text-red-600">{actionError}</p>}
+        {actionSuccess && <p className="mb-3 text-sm text-emerald-600">{actionSuccess}</p>}
         {loading ? (
           <p className="text-sm text-gray-500">Chargement...</p>
         ) : (
@@ -321,7 +380,10 @@ export function UsersPage() {
                 const isManageable = !isSelf && m.role !== "proprietaire";
                 return (
                   <tr key={m.id} className="border-t border-gray-100 align-top">
-                    <td className="py-2 text-gray-900">{m.full_name ?? "—"}</td>
+                    <td className="py-2 text-gray-900">
+                      {m.full_name ?? "—"}
+                      {m.email && <div className="text-xs text-gray-500">{m.email}</div>}
+                    </td>
                     <td className="py-2">
                       {isOwner && isManageable ? (
                         <select
@@ -417,6 +479,51 @@ export function UsersPage() {
                               Supprimer
                             </button>
                           )}
+                          {canManageCredentials &&
+                            (passwordForId === m.id ? (
+                              <div className="flex flex-col items-end gap-2">
+                                <div className="relative">
+                                  <input
+                                    type={showNewPassword ? "text" : "password"}
+                                    value={newPassword}
+                                    onChange={(e) => setNewPassword(e.target.value)}
+                                    placeholder="Nouveau mot de passe"
+                                    autoComplete="new-password"
+                                    className="w-48 rounded-md border border-gray-300 px-2 py-1 pr-8 text-xs"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowNewPassword((v) => !v)}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+                                    aria-label={showNewPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                                  >
+                                    {showNewPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                                  </button>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => savePassword(m.id)}
+                                    disabled={savingPassword}
+                                    className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                                  >
+                                    {savingPassword ? "Enregistrement..." : "Enregistrer"}
+                                  </button>
+                                  <button
+                                    onClick={closePasswordForm}
+                                    className="text-xs text-gray-500 hover:text-gray-900"
+                                  >
+                                    Annuler
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => openPasswordForm(m.id)}
+                                className="rounded-md bg-gray-100 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-200"
+                              >
+                                Nouveau mot de passe
+                              </button>
+                            ))}
                         </div>
                       )}
                     </td>

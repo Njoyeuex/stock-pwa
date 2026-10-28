@@ -83,6 +83,14 @@ export async function adminDeleteUser(input: { org_id: string; membership_id: st
   return callFunction<{ ok: true }>("admin-delete-user", input, session.access_token);
 }
 
+export async function adminSetPassword(input: { org_id: string; membership_id: string; password: string }) {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) throw new AuthApiError("Vous devez être connecté.");
+  return callFunction<{ ok: true }>("admin-set-password", input, session.access_token);
+}
+
 export async function adminUnlockAccount(email: string) {
   const {
     data: { session },

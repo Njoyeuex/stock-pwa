@@ -1180,6 +1180,10 @@ export type Database = {
         Args: { p_org_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
       }
+      get_org_member_emails: {
+        Args: { p_org_id: string }
+        Returns: { user_id: string; email: string }[]
+      }
       has_permission: {
         Args: { p_org_id: string; p_permission: string }
         Returns: boolean
