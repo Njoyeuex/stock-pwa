@@ -3,32 +3,39 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-// Every table with business data worth restoring. Storage objects (product photos) are
-// not included - only structured data.
-const BACKUP_TABLES = [
-  "organizations",
-  "profiles",
-  "memberships",
-  "stores",
-  "product_categories",
-  "products",
-  "product_costs",
-  "product_stock",
-  "stock_movements",
-  "suppliers",
-  "customers",
-  "customer_credit_balances",
-  "customer_credit_movements",
-  "purchases",
-  "purchase_lines",
-  "services",
-  "sales",
-  "sale_lines",
-  "payments",
-  "caisse_sessions",
-  "cash_movements",
-  "audit_log",
-];
+// Every table with business data worth restoring, with its primary key. Storage objects
+// (product photos) are not included - only structured data.
+const BACKUP_TABLES: Record<string, string[]> = {
+  organizations: ["id"],
+  profiles: ["id"],
+  memberships: ["id"],
+  stores: ["id"],
+  product_categories: ["id"],
+  products: ["id"],
+  product_costs: ["product_id"],
+  product_stock: ["product_id", "store_id"],
+  stock_movements: ["id"],
+  suppliers: ["id"],
+  customers: ["id"],
+  customer_credit_balances: ["customer_id"],
+  customer_credit_movements: ["id"],
+  supplier_credit_balances: ["supplier_id"],
+  supplier_credit_movements: ["id"],
+  purchases: ["id"],
+  purchase_lines: ["id"],
+  services: ["id"],
+  sales: ["id"],
+  sale_lines: ["id"],
+  payments: ["id"],
+  caisse_sessions: ["id"],
+  cash_movements: ["id"],
+  audit_log: ["id"],
+};
+
+// The API caps how many rows one request returns (1000 by default), so a single
+// select("*") would silently cut a bigger table. Page through it in primary-key order
+// until a page comes back empty, whatever that cap is set to.
+const PAGE_SIZE = 1000;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -77,10 +84,18 @@ Deno.serve(async (req: Request) => {
     }
 
     const dump: Record<string, unknown[]> = {};
-    for (const table of BACKUP_TABLES) {
-      const { data, error } = await admin.from(table).select("*");
-      if (error) throw new Error(`export ${table}: ${error.message}`);
-      dump[table] = data ?? [];
+    for (const [table, keys] of Object.entries(BACKUP_TABLES)) {
+      const rows: unknown[] = [];
+      for (let from = 0; ; ) {
+        let query = admin.from(table).select("*");
+        for (const key of keys) query = query.order(key);
+        const { data, error } = await query.range(from, from + PAGE_SIZE - 1);
+        if (error) throw new Error(`export ${table}: ${error.message}`);
+        if (!data || data.length === 0) break;
+        rows.push(...data);
+        from += data.length;
+      }
+      dump[table] = rows;
     }
 
     await admin.from("audit_log").insert({
