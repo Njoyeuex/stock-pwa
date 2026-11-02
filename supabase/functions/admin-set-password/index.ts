@@ -3,6 +3,8 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "content-type, authorization",
@@ -36,14 +38,17 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "INVALID_REQUEST" }, 400);
   }
 
-  const { org_id, membership_id, password } = body ?? {};
+  // Sets a new login email, a new password, or both: an empty or missing field is left as is.
+  const { org_id, membership_id, email: rawEmail, password: rawPassword } = body ?? {};
+  const email = typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : "";
+  const password = typeof rawPassword === "string" ? rawPassword : "";
 
   if (
     typeof org_id !== "string" ||
     typeof membership_id !== "string" ||
-    typeof password !== "string" ||
-    password.length < 8 ||
-    password.length > 200
+    (email === "" && password === "") ||
+    (email !== "" && (!EMAIL_RE.test(email) || email.length > 255)) ||
+    (password !== "" && (password.length < 8 || password.length > 200))
   ) {
     return jsonResponse({ error: "INVALID_REQUEST" }, 400);
   }
@@ -64,8 +69,8 @@ Deno.serve(async (req: Request) => {
       .eq("is_active", true)
       .maybeSingle();
 
-    // Only the owner, or a gérant the owner granted perm_users, may set someone else's
-    // password: unlike create/delete, this lets the caller sign in as that account.
+    // Only the owner, or a gérant the owner granted perm_users, may change login details:
+    // unlike create/delete, this lets the caller sign in as that account.
     const isOwner = callerMembership?.role === "proprietaire";
     const isManager = callerMembership?.role === "gerant" && callerMembership?.perm_users === true;
     if (!isOwner && !isManager) {
@@ -82,19 +87,28 @@ Deno.serve(async (req: Request) => {
     if (!target) {
       return jsonResponse({ error: "NOT_FOUND" }, 404);
     }
-    if (target.user_id === callerData.user.id || target.role === "proprietaire") {
+    // The owner can change any account, their own included; a gérant every account but the owner's.
+    if (target.role === "proprietaire" && !isOwner) {
       return jsonResponse({ error: "FORBIDDEN" }, 403);
     }
 
-    const { data: updated, error: updateError } = await admin.auth.admin.updateUserById(target.user_id, {
-      password,
-    });
+    const attributes: { email?: string; email_confirm?: boolean; password?: string } = {};
+    if (email !== "") {
+      // Set by the owner or a gérant, not by the account holder: no confirmation email.
+      attributes.email = email;
+      attributes.email_confirm = true;
+    }
+    if (password !== "") {
+      attributes.password = password;
+    }
+
+    const { data: updated, error: updateError } = await admin.auth.admin.updateUserById(target.user_id, attributes);
     if (updateError || !updated.user) {
-      return jsonResponse({ error: "PASSWORD_UPDATE_FAILED" }, 400);
+      return jsonResponse({ error: email !== "" ? "EMAIL_UPDATE_FAILED" : "PASSWORD_UPDATE_FAILED" }, 400);
     }
 
     // A new password is usually set for someone who got locked out: let them sign in now.
-    if (updated.user.email) {
+    if (password !== "" && updated.user.email) {
       await admin.from("account_lockouts").delete().eq("email", updated.user.email.toLowerCase());
     }
 

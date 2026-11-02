@@ -11,6 +11,7 @@ const EDGE_FUNCTION_ERRORS: Record<string, string> = {
   USER_CREATE_FAILED: "Impossible de créer ce compte (email peut-être déjà utilisé).",
   MEMBERSHIP_CREATE_FAILED: "Impossible d'attribuer ce rôle.",
   PASSWORD_UPDATE_FAILED: "Impossible de modifier ce mot de passe.",
+  EMAIL_UPDATE_FAILED: "Impossible de changer l'email (déjà utilisé par un autre compte ?).",
   METHOD_NOT_ALLOWED: "Une erreur est survenue.",
   SERVER_ERROR: "Une erreur est survenue.",
 };

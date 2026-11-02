@@ -83,7 +83,13 @@ export async function adminDeleteUser(input: { org_id: string; membership_id: st
   return callFunction<{ ok: true }>("admin-delete-user", input, session.access_token);
 }
 
-export async function adminSetPassword(input: { org_id: string; membership_id: string; password: string }) {
+// Changes an account's login email, its password, or both (omit what stays the same).
+export async function adminUpdateCredentials(input: {
+  org_id: string;
+  membership_id: string;
+  email?: string;
+  password?: string;
+}) {
   const {
     data: { session },
   } = await supabase.auth.getSession();
