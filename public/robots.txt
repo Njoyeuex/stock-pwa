@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://stock-pwa-six.vercel.app/sitemap.xml
+Sitemap: https://www.manariyomagasin.app/sitemap.xml
